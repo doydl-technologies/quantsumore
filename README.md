@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/cedricmoorejr/quantsumore/main/gui/assets/py_quantsumore_logo.png" alt="quantsumore Logo" width="700"/>
+  <img src="https://raw.githubusercontent.com/cedricmoorejr/defunct-quantsumore/main/gui/assets/quantsumore_logo.png" alt="quantsumore Logo" width="700"/>
 </p>
 
 
