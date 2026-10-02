@@ -1,0 +1,7 @@
+include ARCHIVED.md
+include CONTRIBUTING.md
+include LICENSE
+include README.md
+include SECURITY.md
+recursive-include files *.json *.txt
+recursive-include gui/assets *.ico *.png

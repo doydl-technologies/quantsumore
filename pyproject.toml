@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantsumore"
+version = "3.0.0b2"
+description = "Retired and unsupported financial-market data client preserved for archival use."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Cedric Moore Jr." },
+]
+keywords = ["finance", "market-data", "retired", "unsupported"]
+classifiers = [
+  "Development Status :: 7 - Inactive",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Natural Language :: English",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+  "beautifulsoup4",
+  "importlib-resources; python_version < '3.9'",
+  "lxml",
+  "matplotlib",
+  "numpy",
+  "openpyxl",
+  "pandas",
+  "pillow",
+  "requests",
+  "requests-cache",
+]
+
+[project.urls]
+Homepage = "https://github.com/cedricmoorejr/quantsumore"
+"Retirement notice" = "https://github.com/cedricmoorejr/quantsumore/blob/main/ARCHIVED.md"
+Source = "https://github.com/cedricmoorejr/quantsumore"
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+  "quantsumore",
+  "quantsumore._http",
+  "quantsumore.analysis",
+  "quantsumore.analysis.indicators",
+  "quantsumore.api",
+  "quantsumore.api.cpi",
+  "quantsumore.api.cpi.parse",
+  "quantsumore.api.crypto",
+  "quantsumore.api.crypto.parse",
+  "quantsumore.api.equity",
+  "quantsumore.api.equity.parse",
+  "quantsumore.api.forex",
+  "quantsumore.api.forex.parse",
+  "quantsumore.api.treasury",
+  "quantsumore.api.treasury.parse",
+  "quantsumore.files",
+  "quantsumore.files.crypto",
+  "quantsumore.gui",
+  "quantsumore.gui.assets",
+  "quantsumore.gui.cpi",
+  "quantsumore.statement_types",
+]
+
+[tool.setuptools.package-dir]
+quantsumore = "."
+
+[tool.setuptools.package-data]
+quantsumore = [
+  "files/*.json",
+  "files/*.txt",
+  "files/crypto/*.json",
+  "gui/assets/*.ico",
+  "gui/assets/*.png",
+]

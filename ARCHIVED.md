@@ -11,8 +11,11 @@ historical reference and is no longer maintained.
 - Existing behavior may stop working as third-party websites, APIs, and data formats change.
 - Published packages remain available for reproducibility, but are unsupported.
 
-The latest PyPI release available at retirement was `2.1.5b1`. It should not be
-treated as production-ready or as a maintained source of financial data.
+The last maintained PyPI release available at retirement was `2.1.5b1`. A final
+archival release, `3.0.0b2`, was published later to preserve the final source
+state and surface this retirement notice. Neither release is supported or
+should be treated as production-ready or as a maintained source of financial
+data.
 
 ## Using or continuing the project
 

@@ -90,13 +90,14 @@ The `quantsumore` library is a comprehensive Python package designed for retriev
 
 ### Installing the `quantsumore` Package
 
-The last published PyPI release can be installed explicitly:
+The final archival PyPI release can be installed explicitly:
 
 ```bash
-pip install quantsumore==2.1.5b1
+pip install quantsumore==3.0.0b2
 ```
 
-No additional releases are planned.
+This release is unsupported and exists to preserve the final source state and
+surface the retirement notice. No additional releases are planned.
 
 
 # Using the `quantsumore` API Clients
