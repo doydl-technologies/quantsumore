@@ -5,14 +5,24 @@
 
 
 
-# 🚀 Power Up Your Financial Analysis with quantsumore
+# quantsumore — retired
 
 ---
 
 > [!WARNING]
-> **This project is no longer maintained.** No further updates, compatibility fixes,
-> endpoint repairs, or security fixes are planned. Because `quantsumore` relies on
-> third-party data sources, functionality may stop working without notice.
+> **This project was retired on July 27, 2025, and is no longer maintained.**
+> No further releases, compatibility fixes, endpoint repairs, support, or security
+> updates are planned. Issues and pull requests are not being accepted.
+>
+> `quantsumore` depends on undocumented and third-party data sources that may change
+> without notice. Existing functionality may already be incomplete or broken. Do not
+> rely on this project for production systems, security-sensitive workloads, or
+> financial decisions.
+
+[![Project status: retired](https://img.shields.io/badge/project%20status-retired-critical)](ARCHIVED.md)
+
+The repository and its published packages remain available as historical references.
+See [ARCHIVED.md](ARCHIVED.md) for the retirement policy and guidance for forks.
 
 ---
 
@@ -57,11 +67,6 @@ Users are advised to independently verify the accuracy of the data obtained via 
 
 ### Summary of the `quantsumore` Library
 
-[![Downloads](https://static.pepy.tech/badge/quantsumore)](https://pepy.tech/project/quantsumore)
-[![Downloads](https://static.pepy.tech/badge/quantsumore/month)](https://pepy.tech/project/quantsumore)
-[![Downloads](https://static.pepy.tech/badge/quantsumore/week)](https://pepy.tech/project/quantsumore)
-![Static Badge](https://img.shields.io/badge/status-unmaintained-red)
-
 The `quantsumore` library is a comprehensive Python package designed for retrieving and analyzing a wide range of financial market data. It provides specialized API clients to fetch data from various financial markets, including cryptocurrencies, equities, Forex, Treasury instruments, and Consumer Price Index (CPI) metrics. Below is an overview of the key API clients and their functionalities.
 
 ## Table of Contents
@@ -78,17 +83,20 @@ The `quantsumore` library is a comprehensive Python package designed for retriev
   - [Examples of Financial and Technical Analysis Applications](#examples-of-financial-and-technical-analysis-applications)
 
 # Installation
-To start using the `quantsumore` API clients for financial data analysis, follow these steps to install the package.
+
+> [!CAUTION]
+> Installation is documented only for reproducibility and evaluation of legacy systems.
+> The package is unsupported and should not be selected for new projects.
 
 ### Installing the `quantsumore` Package
 
-You can install `quantsumore` directly from PyPI using `pip`. Open your terminal and run the following command:
+The last published PyPI release can be installed explicitly:
 
 ```bash
-pip install quantsumore
+pip install quantsumore==2.1.5b1
 ```
 
-This will install the `quantsumore` package along with any required dependencies.
+No additional releases are planned.
 
 
 # Using the `quantsumore` API Clients

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project retired
+    url: https://github.com/cedricmoorejr/quantsumore/blob/main/ARCHIVED.md
+    about: This project is no longer maintained and does not accept support requests.
