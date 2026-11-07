@@ -55,53 +55,33 @@
 import re
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ...market_utils import fxutil
 from ...shape_tools import is_valid_dataframe
 from ...parse_tools import convert_to_float
-from ...date_parser import dtparse
-from ...strata_utils import IterDict
-from ...proxy import Proxy
-from ...exceptions import (
-    # FXPipelineError,
-    # FXInterbankError,
-    # FXNoDataError,
-    # FXDataUnavailableError,
-    # FXInterbankNoDataError,
+from ....date_parser import dtparse
+from ....strata_utils import IterDict
+from ....proxy import Proxy
+from ....exceptions import (
     FXInterbankDataUnavailableError,
-    # LiveBidAskNoDataError,
-    # LiveBidAskUnavailableError,
-    # LiveQuoteValidationError,
-    # LiveQuoteUnavailableError,
-    # ConversionValidationError,
     ConversionUnavailableError,
     ConversionNoDataError,
     InvalidCurrencyPairError,
     CurrencyPairNotFoundError,
     ConversionError,
 )
-from ...markup import idextract 
+from ....markup import idextract
 
 
 __all__ = ['conversion', 'interbank']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
-######################################################################
-# DATA TYPE 1
-######################################################################
 """
 Expected Input: Interbank FX Rates API Response
 
@@ -329,6 +309,10 @@ class conversion:
         if isinstance(node, dict) and "error" in node: raise ConversionError(node["error"])
         data = node["response"] if isinstance(node, dict) and "response" in node else node
         if not isinstance(data, dict): raise ConversionError("Unexpected structure for data payload")
+        if isinstance(data.get('d'), list):
+            if any(isinstance(row, dict) and isinstance(row.get('RatePairValue'), (int, float)) and row['RatePairValue'] > 0 and isinstance(row.get('LastUpdate'), str) for row in data['d']):
+                return dataset
+            raise ConversionNoDataError('The provider returned no valid daily exchange rates.')
         if all(not data.get(k) for k in expected): raise ConversionNoDataError("All data arrays are empty or missing")
         custom = data.get("Custom")
         if not isinstance(custom, list): raise ConversionNoDataError("No 'Custom' list in response")
@@ -356,7 +340,19 @@ class conversion:
     def _parse(self):
         cleaned = IterDict.find(self._json, first_only=False, target_key="response", wrap=False)
         if not cleaned or not isinstance(cleaned, list): raise ValueError("No 'response' list found in JSON")
-        entry = cleaned[0]; raw = entry.get("Custom")
+        entry = cleaned[0]
+        if isinstance(entry.get('d'), list):
+            from datetime import datetime
+            import math
+            rows = [row for row in entry['d'] if isinstance(row, dict) and isinstance(row.get('RatePairValue'), (int, float)) and math.isfinite(row['RatePairValue']) and row['RatePairValue'] > 0 and isinstance(row.get('LastUpdate'), str)]
+            if not rows:
+                raise ConversionNoDataError('The provider returned no valid daily exchange rates.')
+            latest = max(rows, key=lambda row: datetime.strptime(re.sub(r':\s+', ':', row['LastUpdate']), '%a, %d %b %Y %H:%M:%S'))
+            self._timestamp = latest['LastUpdate']
+            self._rate_from = convert_to_float(latest['RatePairValue'], roundn=6)
+            self._rate_to = round(1 / self._rate_from, 6)
+            return
+        raw = entry.get("Custom")
         if not isinstance(raw, list): raise ValueError("Expected 'Custom' key with a list value")
         valid = [(t,v) for t,v in raw if isinstance(t,(int,float)) and isinstance(v,(int,float))]
         if not valid: raise ValueError("No valid [timestamp, value] in 'Custom'")

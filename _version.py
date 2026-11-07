@@ -54,7 +54,7 @@
 
 __all__       = ['__version__']
 
-__version__   = "v3.0.0b2"
+__version__   = "3.0.0b3"
 
 def __dir__():
     return __all__

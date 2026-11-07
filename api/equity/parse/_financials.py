@@ -52,36 +52,25 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# import re
-# from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...date_parser import dtparse
+from ....date_parser import dtparse
 from ...shape_tools import is_valid_dataframe
-from ...strata_utils import IterDict
-from ...exceptions import (
-    # FinancialsError,
+from ....strata_utils import IterDict
+from ....exceptions import (
     FinancialStatementUnavailableError,
 )
-from ...statement_types.types import (
-    # FinancialStatement,
+from ....statement_types.types import (
     IncomeStatement,
     BalanceSheet,
     CashFlowStatement,
 )
-from ...markup import idextract
+from ....markup import idextract
 
 
 __all__ = ['statements']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 
 """
@@ -170,7 +159,7 @@ Summary:
 	• Designed for robust tabular rendering, comparison, and analysis.
 """
 class statements:
-    # map JSON keys → (DataFrame subclass, attribute name)
+    # Map provider table keys to statement types and destination attributes.
     _TABLE_MAP = {
         "incomeStatementTable": (IncomeStatement, "income_statement"),
         "balanceSheetTable":  (BalanceSheet,  "balance_sheet"),
@@ -183,7 +172,6 @@ class statements:
         self.error = True
         self._raw = IterDict.isNested(json_content)
 
-        # placeholders for the three statements
         for _, attr in self._TABLE_MAP.values():
             setattr(self, attr, None)
 
@@ -209,7 +197,6 @@ class statements:
 
             if not ok:
                 ticker = idextract.extract(url, idextract.SYMBOL)
-                # try to find a user-friendly message
                 msg = (
                     IterDict.find(info["response"], "message")
                     or IterDict.find(info["response"], "errorMessage")
@@ -241,20 +228,17 @@ class statements:
         """
         Build a FinancialStatement subclass from raw headers+rows.
         """
-        # 1) Drop empty header columns
         valid_keys = {k: v for k, v in headers.items() if v}
         drop_keys  = set(headers) - set(valid_keys)
         for r in rows:
             for k in drop_keys:
                 r.pop(k, None)
 
-        # 2) Build DataFrame
         df = pd.DataFrame.from_records(
             data=rows,
             columns=sorted(valid_keys),
         ).rename(columns=valid_keys)
 
-        # 3) Parse dates in columns 1:
         date_cols = list(df.columns[1:])
         parsed_strs = [
             dtparse.parse(date, to_format="%Y-%m-%d") for date in date_cols
@@ -263,7 +247,6 @@ class statements:
         sorted_dates = sorted(parsed_strs, reverse=True)
         df = df[[df.columns[0]] + sorted_dates]
 
-        # 4) Clean numeric data (currency-to-float) vectorized
         def _to_float(x):
             if isinstance(x, str) and x not in ("", "--"):
                 return float(x.replace("$","").replace(",",""))
@@ -272,12 +255,10 @@ class statements:
         for col in sorted_dates:
             df[col] = df[col].map(_to_float).fillna("")
 
-        # 5) set index on metric name
         df = df.set_index(df.columns[0])
         df.__class__ = df_class
         return df
 
-    # user-facing properties
     @property
     def IncomeStatement(self):
         if not is_valid_dataframe(self.income_statement):

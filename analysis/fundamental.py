@@ -52,154 +52,14 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-"""
-fAnalyze: Unified Engine for Financial Statement Analysis, Ratio Computation, and Excel Export
-────────────────────────────────────────────────────────────────────────────────────────────────
+"""Retrieve, analyze and export company financial statements.
 
-Module Purpose
-────────────────────────────────────────────────────
-`fAnalyze` is the core financial statement analysis interface in the Quantsumore ecosystem.
-It encapsulates all logic required to **retrieve, validate, structure, analyze, and export**
-company financial statements — including income statements, balance sheets, cash flow
-statements, and dividend histories — into a single, reusable analysis object.
-
-This module allows both **analysts** and **programmatic consumers** to load raw financials,
-derive industry-standard ratios, conduct vertical/common-size analysis, and export results
-into a professionally formatted Excel file — all through a fluent, object-oriented API.
-
-All data is accessed through a single callable interface, powered by a backend `engine`
-object (typically `PROC`) that handles URL construction, API routing, scraping, and
-response decoding.
-
-Key Use Cases
-────────────────────────────────────────────────────
-- Institutional-style ratio computation on quarterly or annual data
-- Automated Excel export of financials with styling and indentation
-- Common-size statement transformation for benchmarking and trend analysis
-- Programmatic workflows needing batch loading of fundamentals
-- Backend-agnostic data structuring from NASDAQ-sourced JSON APIs
-
-System Architecture
-────────────────────────────────────────────────────
-1. **Data Acquisition (via `engine.Process`)**  
-   The `engine` provided at initialization is responsible for fetching and parsing raw
-   statement data and dividends via the NASDAQ backend. This includes:
-   - Raw JSON extraction and classification into `income`, `balance`, and `cash_flow`
-   - Dividend data transformation into two parts: summary and history
-   - Validity checks on URLs, ticker presence, and status codes
-
-2. **Data Wrapping and Validation**  
-   Each financial statement is wrapped into a specialized Pandas DataFrame subclass
-   that enables:
-   - Safe property access (e.g., `self.income_statement`, `self.balance_sheet`)
-   - Shape validation (to confirm data presence)
-   - Type-safe access to statement rows/columns
-
-3. **Computed Ratio Layer**  
-   Once loaded, the module supports dozens of commonly-used ratios derived from
-   accounting and finance standards — such as:
-
-   - **Liquidity:** current ratio, quick ratio, cash ratio
-   - **Efficiency:** asset turnover, inventory turnover, receivables turnover
-   - **Profitability:** net margin, operating margin, return on equity/assets/capital
-   - **Solvency:** debt-to-equity, interest coverage, equity multiplier
-   - **Dividend-based:** yield, payout ratio, per-share distributions
-
-   These methods internally extract key line items by account name and raise
-   descriptive errors when required fields are missing.
-
-4. **Common-Size and Comparative Analysis**  
-   Full support is built-in for converting financial statements into "common-size"
-   format — where all values are expressed as a % of a reference item:
-
-   - Income Statement → % of Total Revenue
-   - Balance Sheet → % of Total Assets
-   - Cash Flow → % of Net Cash Flow from Operations
-
-   This enables historical trend analysis or peer comparison.
-
-5. **Excel Export Layer**  
-   Financials (in raw or common-size format) can be exported via `writeStatement()`:
-   
-   - Professionally formatted Excel sheets (via `WriteExcel`)
-   - Automatic indentation, alignment, and bolding based on account type
-   - Support for overwriting or safely appending sheets to existing workbooks
-
-Design Features
-────────────────────────────────────────────────────
-- **Single-entry point:** `fAnalysis(...)` acts as a function that loads all financials
-  for a given ticker and period. Re-accessing previously loaded data reuses the cache.
-- **Robust error handling:** All accessors are guarded by null/dataframe checks,
-  ensuring clean fallback if data is unavailable or malformed.
-- **Built-in introspection:** Properties and methods adjust visibility based on which
-  statements are currently loaded (`__dir__` reflects current data context).
-- **Engine-agnostic:** As long as the engine adheres to the expected contract
-  (returning a dict with `financial_statements` and optionally `dividend`),
-  it can be swapped in.
-- **Developer-extensible:** New ratios, export formats, or sources can be added with
-  minimal changes due to strong modular boundaries.
-
-Data Guarantees
-────────────────────────────────────────────────────
-- Financial data is always returned as Pandas DataFrames, unless missing — in which case
-  None is returned.
-- Ratio methods return a single float value (or None), with clear failure messages if
-  dependent line items are not present.
-- If the backend fails or returns invalid data, the user is shown a descriptive
-  error (e.g., delisted ticker, no dividend history available, malformed payload).
-- Dividend data includes both summary stats (yield, annual payout) and a full
-  historical table with ex-dates, declaration dates, and payout amounts.
-
-Usage
-────────────────────────────────────────────────────
-from quantsumore.analysis import fAnalysis
-
-# Load Apple Inc. financials (annual)
-fAnalysis("AAPL", "Annual")
-
-# Access full balance sheet
-fAnalysis.balance_sheet
-
-# Compute key ratios
-print(fAnalysis.current_ratio())     # Current Assets / Current Liabilities
-print(fAnalysis.net_margin())        # Net Income / Total Revenue
-
-# Write all statements to Excel
-fAnalysis.writeStatement("AAPL_fundamentals.xlsx", include_common_size=True)
-
-Available Statements (after calling fAnalysis(ticker, period))
-────────────────────────────────────────────────────
-• `fAnalysis.income_statement`
-• `fAnalysis.balance_sheet`
-• `fAnalysis.cash_flow_statement`
-• `fAnalysis.dividend_report` → Summary statistics (yield, annual payout)
-• `fAnalysis.dividend_data` → Historical dividends (date, amount)
-
-Available Export
-────────────────────────────────────────────────────
-• `fAnalysis.writeStatement(path, include_common_size=False)`
-  • `path`: file path to save Excel workbook
-  • `include_common_size`: include common-size versions of all statements
-
-Implementation Notes
-────────────────────────────────────────────────────
-• Relies on `engine.Process()` to retrieve and categorize EquityProviderD financials
-• Uses deep pandas indexing and alignment logic for cross-statement calculations
-• Statement formatting is governed by `frameworks.statement_layouts`, which provides
-  indentation, parent-child logic, and subtotal identification
-• Excel output is powered by OpenPyXL and is 100% file-format compatible with
-  Microsoft Excel and Google Sheets
-
-Warnings & Best Practices
-────────────────────────────────────────────────────
-• Always call `fAnalysis(ticker, period)` before trying to access statements or ratios
-• Not all companies report the same accounts — expect missing data for some metrics
-• Dividend data may be unavailable for delisted or pre-IPO tickers
-• Ratios return `None` (not errors) when key accounts are missing
-"""
+The configured engine supplies financial statements and dividend data. Load a
+ticker and period before accessing statements or ratios; available methods
+depend on which datasets are loaded. Statement accessors return copies of the
+cached data. Excel exports use the statement layout registry."""
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ._frameworks import WriteExcel
 from ..date_parser import dtparse
 from ..exceptions import (
@@ -221,108 +81,29 @@ __all__ = ['fAnalyze']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 class fAnalyze:
-    """
-    Central interface for the retrieval, validation, analysis, and export of company financial statements
-    and ratios, unifying access to raw data, computed metrics, and Excel output within a single object.
+    """Load financial statements and dividends through a configured engine.
 
-    Purpose:
-    -----------
-        The `fAnalyze` class orchestrates the end-to-end workflow for financial statement analysis.
-        It loads, structures, and verifies a company’s income statement, balance sheet, cash flow statement,
-        and dividend history, then provides tools for industry-standard ratio calculations, 
-        common-size analysis, and formatted Excel exports—all accessible through a fluent, object-oriented API.
+    Call the instance with a ticker and period before accessing statements,
+    ratios, common-size analysis or Excel exports. Successful loads are cached
+    by ticker and period. Statement accessors return copies and raise
+    dataset-specific exceptions when their data is unavailable.
 
-    Workflows:
-    -----------
-        - Data acquisition:   Fetch all financial statements and dividend data for a given ticker/period via the configured engine.
-        - Ratio analysis:     Compute key accounting and market ratios for liquidity, efficiency, profitability, solvency, and returns.
-        - Comparative analysis: Perform common-size and vertical analyses to normalize statements for period-to-period or peer comparison.
-        - Excel export:       Save selected statements (standard or common-size) to a professionally formatted Excel file.
-
-    Attributes:
-    -----------
-        income_statement      : Wrapped Pandas DataFrame containing the company’s income statement.
-        balance_sheet         : Wrapped Pandas DataFrame containing the balance sheet.
-        cash_flow_statement   : Wrapped Pandas DataFrame containing the cash flow statement.
-        dividend_data         : Pandas DataFrame or None, providing historical dividend details.
-        dividend_report       : Pandas DataFrame or None, providing summary dividend statistics.
-        ratios                : Helper object exposing all available ratio calculation methods.
-        common_size           : Helper object for generating common-size versions of all statements.
-        vertical_analysis     : Helper object for performing vertical analysis.
-        ticker                : Current company ticker symbol loaded.
-        cache                 : Internal cache to prevent redundant data loads by ticker/period.
-
-    Methods:
-    -----------
-        current_ratio(), quick_ratio(), debt_to_equity_ratio(), ...
-            Compute and return standard liquidity, solvency, efficiency, and profitability ratios.
-
-        dividend_yield(), annual_dividend(), ex_dividend_date()
-            Access key dividend statistics and recent ex-dividend information.
-
-        CommonSize(financial_statement)
-            Generate a common-size statement for income, balance sheet, or cash flow as percentages of a key base item.
-
-        VerticalAnalysis(financial_statement)
-            Perform vertical analysis to present each line item as a percentage of statement total.
-
-        writeStatement(save_path, financial_statements=None, include_common_size=False)
-            Export selected statements (raw or common-size) to a formatted Excel file at the specified path.
-
-    Notes:
-    -----------
-        - Always invoke the instance (i.e., `fAnalyze(ticker, period)`) before accessing statements or ratios.
-        - All statement and dividend data are delivered as Pandas DataFrames for seamless analysis and export.
-        - Ratio methods return either a float, Series, or None if required accounts are unavailable—never raise on missing line items.
-        - Designed to be backend-agnostic: any engine implementing the expected `Process()` contract is supported.
-        - Built-in validation and custom exceptions guard against accessing uninitialized or incomplete data.
-        - Excel output is 100% compatible with Microsoft Excel and Google Sheets, with auto-formatting for clarity.
+    The engine must implement Process(ticker, period). Its results supply the
+    income statement, balance sheet, cash flow statement and dividend datasets.
+    Missing-data handling depends on the requested analysis method.
     """
     def __init__(self, engine):
+        """Store the data engine and initialize analysis helpers and the cache.
+
+        engine must provide Process(ticker, period). No company data is loaded
+        until the instance is called with a ticker and reporting period.
         """
-        Initialize an fAnalyze instance and prepare all attributes for financial data analysis.
-
-        Parameters:
-        -----------
-            engine : object
-                Backend engine responsible for fetching, parsing, and structuring financial statement
-                and dividend data for a given ticker and reporting period. Must provide a compatible
-                `Process(ticker, period)` interface.
-
-        Initializes:
-        -----------
-            engine                : Stores the provided backend engine for all subsequent data operations.
-            ticker                : Set to None; will hold the ticker symbol once data is loaded.
-            _income_statement     : Internal storage for the wrapped income statement DataFrame.
-            _balance_sheet        : Internal storage for the wrapped balance sheet DataFrame.
-            _cash_flow_statement  : Internal storage for the wrapped cash flow statement DataFrame.
-            dividend_data         : Set to None; will hold dividend history data if available.
-            dividend_report       : Set to None; will hold dividend summary data if available.
-            ratios                : Helper object, exposing all ratio calculation methods.
-            common_size           : Helper object for generating common-size statements.
-            vertical_analysis     : Helper object for vertical analysis of statements.
-            cache                 : In-memory dictionary for caching financial data by (ticker, period).
-
-        Notes:
-        -----------
-            - The instance is not ready for analysis until `__call__` is used to load a specific ticker and period.
-            - All statement attributes are initialized empty and will be replaced with validated, structured data
-              after successful data acquisition.
-            - Helper objects (`ratios`, `common_size`, `vertical_analysis`) are pre-initialized for immediate use
-              once data is loaded.
-        """  	
         self.engine = engine
         self.ticker = None       
         self._income_statement = pd.DataFrame()  
@@ -331,80 +112,24 @@ class fAnalyze:
         self.dividend_data = None
         self.dividend_report = None
         
-        # ──── Imports ────        
         self.ratios = Ratios(self)   
         self.common_size = Common_Size(self)       
         self.vertical_analysis = Vertical_Analysis(self)   
         self.cache = {}      
 
     class Statement:
+        """Wrap a financial DataFrame indexed by account, with periods as columns.
+
+        Attribute and item access delegate to the DataFrame. list_accounts()
+        excludes rows containing only missing values. LineItem() matches accounts
+        case-insensitively and accepts a column label, "current" or "past" as its
+        optional timeframe. Parsed column dates are cached for timeframe lookups.
+        Missing accounts raise KeyError; unsupported timeframes raise ValueError.
         """
-        A wrapper for individual financial statements, providing structured access and
-        enhanced utilities over a Pandas DataFrame representation.
-
-        Purpose:
-        -----------
-            The `Statement` class encapsulates a single financial statement (such as an income statement,
-            balance sheet, or cash flow statement) and offers specialized accessors, 
-            property delegation, and convenience methods for financial analysis.
-
-        Attributes:
-        -----------
-            data              : Pandas DataFrame holding the raw statement data, indexed by account name and
-                                with columns representing reporting periods.
-            _parsed_dates     : Internal cache mapping original column headers to parsed datetime objects.
-
-        Methods:
-        -----------
-            __getattr__(item)
-                Delegates attribute access directly to the underlying DataFrame.
-
-            __getitem__(key), __setitem__(key, value)
-                Enable dictionary-like access and mutation of the wrapped DataFrame.
-
-            list_accounts()
-                Return a list of all account names (row indices) present in the statement,
-                excluding empty or missing rows.
-
-            LineItem(account_name, timeframe=None)
-                Retrieve the value(s) for a given account name, optionally filtered by
-                a specific reporting period ("current", "past", or a column label).
-                Case-insensitive and raises KeyError if the account is not found.
-
-            _get_parsed_dates()
-                Parse column headers into datetime objects, used for robust time-based lookups.
-
-            __repr__()
-                Returns the standard string representation of the DataFrame.
-
-        Notes:
-        -----------
-            - Most DataFrame functionality is accessible directly through the `Statement` object,
-              including attribute and item access.
-            - Provides robust account lookups, forgiving to minor inconsistencies in statement row naming.
-            - Intended for internal use within the `fAnalyze` workflow, but may be reused for
-              custom statement analysis elsewhere.
-        """    	
         def __init__(self, data):
-            """
-            Initialize a Statement instance with provided financial statement data.
+            """Wrap a DataFrame or convert array-like data to one.
 
-            Parameters:
-            -----------
-                data : pandas.DataFrame or array-like
-                    The raw financial statement data, either as a DataFrame or an object convertible
-                    to a DataFrame. Rows should represent account names, and columns should represent
-                    reporting periods (typically as date strings).
-
-            Initializes:
-            -----------
-                data           : Stores the provided financial data as a Pandas DataFrame.
-                _parsed_dates  : Internal cache for parsed column date labels, set to None initially.
-
-            Notes:
-            -----------
-                - If `data` is not already a DataFrame, it will be converted automatically.
-                - This constructor does not validate account or column structure; validation occurs elsewhere.
+            The constructor does not validate account names or reporting-period labels.
             """
             self.data = pd.DataFrame(data) if not isinstance(data, pd.DataFrame) else data
             self._parsed_dates = None
@@ -469,48 +194,24 @@ class fAnalyze:
     def is_loaded(self, df):
         return df is not None and not df.empty      
            
-    def __call__(self, ticker, period, api_key=None):
+    def __call__(self, ticker, period):
         """ Calls the instance as a function to fetch and process financial data for a specified ticker and period."""    	
-        self.get_financial_data(ticker, period, api_key=api_key)    
+        self.get_financial_data(ticker, period)
         
-    def get_financial_data(self, ticker, period, api_key=None):    
+    def get_financial_data(self, ticker, period):
+        """Load statement and dividend datasets for a ticker and reporting period.
+
+        ticker must be a string, or a nonempty list/tuple whose first item is used.
+        period is passed to the configured engine. Cached ticker/period results are
+        reused; otherwise engine.Process() supplies financial_statements and dividend
+        entries.
+
+        Each statement is loaded independently when it is a nonempty DataFrame.
+        Missing statements and dividend datasets remain unavailable through their
+        accessors. Status messages are printed, while engine and parsing exceptions
+        can propagate. A non-string ticker raises ValueError; an empty ticker
+        sequence raises TickerNotFoundError.
         """
-        Fetch and load all available financial statements and dividend data for a specified ticker and period.
-
-        Parameters:
-        -----------
-            ticker : str or list of str
-                The company ticker symbol to fetch data for. If a list is provided, the first element is used.
-            period : str
-                The reporting period to retrieve (e.g., "Annual", "Quarterly").
-
-        Workflow:
-        -----------
-            - If data for the given (ticker, period) is cached, reload all statements and dividends from cache.
-            - If not cached, uses the engine's `Process` method to retrieve raw financial data from the backend.
-            - Loads and validates the income statement, balance sheet, and cash flow statement; clears all if any are missing.
-            - Separately attempts to load dividend summary and history, updating the cache if successful.
-
-        Sets:
-        -----------
-            income_statement     : Populated with wrapped DataFrame if successfully loaded, else set to None.
-            balance_sheet        : Populated with wrapped DataFrame if successfully loaded, else set to None.
-            cash_flow_statement  : Populated with wrapped DataFrame if successfully loaded, else set to None.
-            dividend_data        : Populated with DataFrame if successfully loaded, else set to None.
-            dividend_report      : Populated with summary DataFrame if successfully loaded, else set to None.
-            cache                : Updated with all successfully loaded data for the (ticker, period) key.
-
-        Raises:
-        -----------
-            ValueError           : If the ticker argument is missing or of invalid type.
-
-        Notes:
-        -----------
-            - If any of the main statements are missing or empty, all are set to None to avoid partial data issues.
-            - Errors encountered during loading are printed to the console, but do not halt execution.
-            - Dividend data is optional and may not be available for some tickers (e.g., delisted or pre-IPO companies).
-            - This method should be called before accessing any analysis or export features.
-        """       	
         if isinstance(ticker, (list, tuple)):
             if not ticker:
                 raise TickerNotFoundError("Cannot find ticker symbol!")
@@ -530,22 +231,18 @@ class fAnalyze:
             self.dividend_data = cached_data.get('dividend_data', None)
             self.dividend_report = cached_data.get('dividend_report', None)
         else:
-            # 1. Attempt to Load Financial Statements
-            data = self.engine.Process(self.ticker, period, api_key=api_key)   
+            data = self.engine.Process(self.ticker, period)
             statements = data.get('financial_statements', [])
 
-            # 1a. No statements returned at all
             if not statements:
                 self.income_statement     = None
                 self.balance_sheet        = None
                 self.cash_flow_statement  = None
                 print(f"Financial Statements could not be loaded for {self.ticker}.")
 
-            # 1b. At least one statement triple returned—unpack safely
             else:
                 income, balance, cash_flow = statements[0]
 
-                # 1b-i. Check for usable DataFrames and sanitize or set None per statement
                 loaded_income = (
                     self.__fillna_empty(income)
                     if isinstance(income, pd.DataFrame) and not income.empty else None
@@ -559,7 +256,6 @@ class fAnalyze:
                     if isinstance(cash_flow, pd.DataFrame) and not cash_flow.empty else None
                 )
 
-                # 1b-ii. Assign to class and cache
                 self.income_statement     = loaded_income
                 self.balance_sheet        = loaded_balance
                 self.cash_flow_statement  = loaded_cashflow
@@ -570,7 +266,6 @@ class fAnalyze:
                     'cash_flow_statement':  loaded_cashflow,
                 }
 
-                # 1b-iii. Reporting: check if all were loaded, or note which are missing
                 if self.is_loaded(loaded_income) and self.is_loaded(loaded_balance) and self.is_loaded(loaded_cashflow):
                     print(f"Financial Statements successfully loaded for {self.ticker}.")
                 else:
@@ -585,22 +280,18 @@ class fAnalyze:
                     print(f"Financial Statements loaded for {self.ticker}.")
                     print(f"  • Missing: {', '.join(missing)}")                
 
-            # 2. Attempt to Load Dividend Data
             divs = data.get('dividend', [])
 
-            # 2a. API returned a string error
             if isinstance(divs, str) and divs.startswith("Error:"):
                 self.dividend_report = None
                 self.dividend_data   = None
                 print(divs.replace("Error: ", ""))
 
-            # 2b. No entries at all
             elif not divs:
                 self.dividend_report = None
                 self.dividend_data   = None
                 print(f"No dividend data available for {self.ticker}.")
 
-            # 2c. At least one entry returned—unpack safely
             else:
                 report, hist = divs[0]
                 if report is not None and hist is not None:
@@ -617,18 +308,10 @@ class fAnalyze:
                     print(f"No valid dividend data found for {self.ticker}.")
 
                 
-    # These property methods manage access to core financial data objects.
-    #
-    # Each property enforces that the underlying data is both present and loaded
-    # (i.e., not empty), raising a custom exception if the required information is missing.
-    # This prevents accidental analysis or export of incomplete financial datasets.
-    # 
-    # The getter methods always return a deep copy of the underlying data to ensure 
-    # that calling code cannot inadvertently modify the original object. The setters 
-    # convert incoming raw data to a standardized internal format where appropriate,
-    # or clear the internal state if `None` is assigned.
+    # Return copies so callers cannot mutate cached statements.
+    # Setters normalize statement data and clear the stored value for None.
     
-    # ────────── Income Statement ────   
+    # Income statement.
     @property
     def income_statement(self):
         stmt = self._income_statement
@@ -640,7 +323,7 @@ class fAnalyze:
     def income_statement(self, value):
         self._income_statement = self.Statement(value) if value is not None else pd.DataFrame()
 
-    # ────────── Balance Sheet ──── 
+    # Balance sheet.
     @property
     def balance_sheet(self):
         bs = self._balance_sheet
@@ -652,7 +335,7 @@ class fAnalyze:
     def balance_sheet(self, value):
         self._balance_sheet = self.Statement(value) if value is not None else pd.DataFrame()
 
-    # ────────── Cash Flow Statement ────    
+    # Cash flow statement.
     @property
     def cash_flow_statement(self):
         cf = self._cash_flow_statement
@@ -664,7 +347,7 @@ class fAnalyze:
     def cash_flow_statement(self, value):
         self._cash_flow_statement = self.Statement(value) if value is not None else pd.DataFrame()
 
-    # ────────── Dividends ────     
+    # Dividends.
     @property
     def dividend_data(self):
         if self._dividend_data is None:
@@ -687,19 +370,10 @@ class fAnalyze:
 
 
     
-    ######################################################################
-    # Calculate key financial ratios for company analysis
-    ######################################################################  
 
-    # A comprehensive set of methods for calculating key financial ratios
-    # using data from a company’s financial statements. It covers all major categories—liquidity,
-    # solvency, profitability, efficiency, and coverage—enabling robust analysis and benchmarking.
-    # Each method is designed to pull and clean the required accounts from the parent Analyze instance,
-    # handling missing data where possible.     
     
     def dividend_yield(self):
-        """
-        Calculate and return the company’s dividend yield.
+        """Calculate and return the company’s dividend yield.
 
         Returns:
         ---------
@@ -707,18 +381,17 @@ class fAnalyze:
 
         Raises:
         --------
-            ValueError: If required dividend data is not available.
+            DividendDataNotLoadedError: If required dividend data is not available.
 
         Notes:
         -------
             Dividend yield represents the ratio of annual dividends per share to the share price.
-        """        
+        """
         self.__assert_data_available([self.dividend_data, self.dividend_report])
         return self.ratios._dividend_yield()
 
     def ex_dividend_date(self):
-        """
-        Retrieve the company’s most recent ex-dividend date.
+        """Retrieve the company’s most recent ex-dividend date.
 
         Returns:
         --------
@@ -726,7 +399,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required dividend data is not available.
+            DividendDataNotLoadedError: If required dividend data is not available.
 
         Notes:
         ------
@@ -736,8 +409,7 @@ class fAnalyze:
         return self.ratios._ex_dividend_date()
 
     def annual_dividend(self):
-        """
-        Return the total annual dividend paid per share.
+        """Return the total annual dividend paid per share.
 
         Returns:
         --------
@@ -745,7 +417,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required dividend data is not available.
+            DividendDataNotLoadedError: If required dividend data is not available.
 
         Notes:
         ------
@@ -755,8 +427,7 @@ class fAnalyze:
         return self.ratios._annual_dividend()
 
     def current_ratio(self):
-        """
-        Calculate and return the current ratio from the balance sheet.
+        """Calculate and return the current ratio from the balance sheet.
 
         Returns:
         --------
@@ -765,7 +436,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is not available.
+            FinancialDataNotLoadedError: If required balance sheet data is not available.
 
         Notes:
         ------
@@ -775,8 +446,7 @@ class fAnalyze:
         return self.ratios._current_ratio()
            
     def quick_ratio(self):
-        """
-        Calculate and return the quick ratio from the balance sheet.
+        """Calculate and return the quick ratio from the balance sheet.
 
         Returns:
         --------
@@ -784,7 +454,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is not available.
+            FinancialDataNotLoadedError: If required balance sheet data is not available.
 
         Notes:
         ------
@@ -796,8 +466,7 @@ class fAnalyze:
 
 
     def cash_ratio(self):
-        """
-        Calculate and return the cash ratio from the balance sheet.
+        """Calculate and return the cash ratio from the balance sheet.
 
         Returns:
         --------
@@ -805,7 +474,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is not available.
+            FinancialDataNotLoadedError: If required balance sheet data is not available.
 
         Notes:
         ------
@@ -817,8 +486,7 @@ class fAnalyze:
 
 
     def debt_to_equity_ratio(self):
-        """
-        Calculate and return the debt to equity ratio from the balance sheet.
+        """Calculate and return the debt to equity ratio from the balance sheet.
 
         Returns:
         --------
@@ -826,7 +494,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is not available.
+            FinancialDataNotLoadedError: If required balance sheet data is not available.
 
         Notes:
         ------
@@ -837,8 +505,7 @@ class fAnalyze:
         return self.ratios._debt_to_equity_ratio()
 
     def debt_to_capital_ratio(self):
-        """
-        Calculate and return the debt-to-capital ratio from the balance sheet.
+        """Calculate and return the debt-to-capital ratio from the balance sheet.
 
         Returns:
         --------
@@ -846,7 +513,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is not available.
+            FinancialDataNotLoadedError: If required balance sheet data is not available.
 
         Notes:
         ------
@@ -857,8 +524,7 @@ class fAnalyze:
         return self.ratios._debt_to_capital_ratio()
 
     def gross_profit_margin_ratio(self):
-        """
-        Calculate and return the gross profit margin ratio from the income statement.
+        """Calculate and return the gross profit margin ratio from the income statement.
 
         Returns:
         --------
@@ -866,7 +532,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is not available.
+            FinancialDataNotLoadedError: If required income statement data is not available.
 
         Notes:
         ------
@@ -877,8 +543,7 @@ class fAnalyze:
         return self.ratios._gross_profit_margin_ratio()
 
     def operating_profit_margin_ratio(self):
-        """
-        Calculate and return the operating profit margin ratio from the income statement.
+        """Calculate and return the operating profit margin ratio from the income statement.
 
         Returns:
         --------
@@ -886,7 +551,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is not available.
+            FinancialDataNotLoadedError: If required income statement data is not available.
 
         Notes:
         ------
@@ -897,8 +562,7 @@ class fAnalyze:
         return self.ratios._operating_profit_margin_ratio()
 
     def net_profit_margin(self):
-        """
-        Calculate and return the net profit margin from the income statement.
+        """Calculate and return the net profit margin from the income statement.
 
         Returns:
         --------
@@ -906,7 +570,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is not available.
+            FinancialDataNotLoadedError: If required income statement data is not available.
 
         Notes:
         ------
@@ -917,8 +581,7 @@ class fAnalyze:
         return self.ratios._net_profit_margin()
 
     def ebit_margin(self):
-        """
-        Calculate and return the EBIT margin from the income statement.
+        """Calculate and return the EBIT margin from the income statement.
 
         Returns:
         --------
@@ -926,19 +589,18 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
-            The EBIT margin shows the percentage of revenue remaining after operating and non-operating expenses, 
+            The EBIT margin shows the percentage of revenue remaining after operating and non-operating expenses,
             excluding interest and taxes. It’s a key indicator of operating profitability.
         """
         self.__assert_data_available([self.income_statement])
         return self.ratios._ebit_margin()
 
     def rd_to_revenue_ratio(self):
-        """
-        Calculate and return the R&D to revenue ratio from the income statement.
+        """Calculate and return the R&D to revenue ratio from the income statement.
 
         Returns:
         --------
@@ -946,7 +608,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
@@ -956,8 +618,7 @@ class fAnalyze:
         return self.ratios._rd_to_revenue_ratio()
 
     def sga_to_revenue_ratio(self):
-        """
-        Calculate and return the SG&A to revenue ratio from the income statement.
+        """Calculate and return the SG&A to revenue ratio from the income statement.
 
         Returns:
         --------
@@ -965,7 +626,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
@@ -976,8 +637,7 @@ class fAnalyze:
         return self.ratios._sga_to_revenue_ratio()
 
     def interest_coverage_ratio(self):
-        """
-        Calculate and return the interest coverage ratio from the income statement.
+        """Calculate and return the interest coverage ratio from the income statement.
 
         Returns:
         --------
@@ -985,7 +645,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
@@ -996,8 +656,7 @@ class fAnalyze:
         return self.ratios._interest_coverage_ratio()
 
     def pretax_profit_margin_ratio(self):
-        """
-        Calculate and return the pretax profit margin ratio from the income statement.
+        """Calculate and return the pretax profit margin ratio from the income statement.
 
         Returns:
         --------
@@ -1005,19 +664,18 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
-            The pretax profit margin measures earnings before tax as a percentage of revenue, 
+            The pretax profit margin measures earnings before tax as a percentage of revenue,
             highlighting profitability before tax obligations.
         """
         self.__assert_data_available([self.income_statement])
         return self.ratios._pretax_profit_margin_ratio()
 
     def tax_burden(self):
-        """
-        Calculate and return the tax burden from the income statement.
+        """Calculate and return the tax burden from the income statement.
 
         Returns:
         --------
@@ -1025,19 +683,18 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
-            The tax burden reflects the proportion of earnings before tax that remains after taxes are paid, 
+            The tax burden reflects the proportion of earnings before tax that remains after taxes are paid,
             indicating the effective tax rate.
         """
         self.__assert_data_available([self.income_statement])
         return self.ratios._tax_burden()
 
     def interest_burden(self):
-        """
-        Calculate and return the interest burden from the income statement.
+        """Calculate and return the interest burden from the income statement.
 
         Returns:
         --------
@@ -1045,7 +702,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
@@ -1055,8 +712,7 @@ class fAnalyze:
         return self.ratios._interest_burden()
 
     def capex_ratio(self):
-        """
-        Calculate and return the CAPEX ratio from the cash flow statement.
+        """Calculate and return the CAPEX ratio from the cash flow statement.
 
         Returns:
         --------
@@ -1064,7 +720,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required cash flow statement data is missing.
+            FinancialDataNotLoadedError: If required cash flow statement data is missing.
 
         Notes:
         ------
@@ -1075,8 +731,7 @@ class fAnalyze:
         return self.ratios._capex_ratio()
 
     def free_cash_flow_to_operating_cash_flow_ratio(self):
-        """
-        Calculate and return the ratio of free cash flow to operating cash flow from the cash flow statement.
+        """Calculate and return the ratio of free cash flow to operating cash flow from the cash flow statement.
 
         Returns:
         --------
@@ -1084,7 +739,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required cash flow statement data is missing.
+            FinancialDataNotLoadedError: If required cash flow statement data is missing.
 
         Notes:
         ------
@@ -1095,8 +750,7 @@ class fAnalyze:
         return self.ratios._free_cash_flow_to_operating_cash_flow_ratio()
 
     def defensive_interval_ratio(self):
-        """
-        Calculate and return the defensive interval ratio using the income statement and balance sheet.
+        """Calculate and return the defensive interval ratio using the income statement and balance sheet.
 
         Returns:
         --------
@@ -1104,7 +758,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required financial statement data is missing.
+            FinancialDataNotLoadedError: If required financial statement data is missing.
 
         Notes:
         ------
@@ -1115,8 +769,7 @@ class fAnalyze:
         return self.ratios._defensive_interval_ratio()
 
     def fixed_charge_coverage_ratio(self, lease_payments=0):
-        """
-        Calculate and return the fixed charge coverage ratio from the income statement.
+        """Calculate and return the fixed charge coverage ratio from the income statement.
 
         Args:
         -----
@@ -1128,7 +781,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement data is missing.
+            FinancialDataNotLoadedError: If required income statement data is missing.
 
         Notes:
         ------
@@ -1139,8 +792,7 @@ class fAnalyze:
         return self.ratios._fixed_charge_coverage_ratio(lease_payments=lease_payments)
 
     def receivables_turnover_ratio(self):
-        """
-        Calculate and return the receivables turnover ratio using the income statement and balance sheet.
+        """Calculate and return the receivables turnover ratio using the income statement and balance sheet.
 
         Returns:
         --------
@@ -1148,7 +800,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required statement data is missing.
+            FinancialDataNotLoadedError: If required statement data is missing.
 
         Notes:
         ------
@@ -1159,8 +811,7 @@ class fAnalyze:
         return self.ratios._receivables_turnover_ratio()
 
     def inventory_turnover_ratio(self):
-        """
-        Calculate and return the inventory turnover ratio using the income statement and balance sheet.
+        """Calculate and return the inventory turnover ratio using the income statement and balance sheet.
 
         Returns:
         --------
@@ -1168,7 +819,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required statement data is missing.
+            FinancialDataNotLoadedError: If required statement data is missing.
 
         Notes:
         ------
@@ -1179,8 +830,7 @@ class fAnalyze:
         return self.ratios._inventory_turnover_ratio()
 
     def days_sales_outstanding(self):
-        """
-        Calculate and return the Days Sales Outstanding (DSO) using the income statement and balance sheet.
+        """Calculate and return the Days Sales Outstanding (DSO) using the income statement and balance sheet.
 
         Returns:
         --------
@@ -1188,7 +838,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required statement data is missing.
+            FinancialDataNotLoadedError: If required statement data is missing.
 
         Notes:
         ------
@@ -1199,8 +849,7 @@ class fAnalyze:
         return self.ratios._days_sales_outstanding()
       
     def days_inventory_on_hand(self):
-        """
-        Calculate and return the Days Inventory On Hand (DIOH).
+        """Calculate and return the Days Inventory On Hand (DIOH).
 
         Returns:
         --------
@@ -1208,7 +857,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1219,8 +868,7 @@ class fAnalyze:
         return self.ratios._days_inventory_on_hand()
 
     def payables_turnover_ratio(self):
-        """
-        Calculate and return the Payables Turnover Ratio.
+        """Calculate and return the Payables Turnover Ratio.
 
         Returns:
         --------
@@ -1228,7 +876,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1239,8 +887,7 @@ class fAnalyze:
         return self.ratios._payables_turnover_ratio()
 
     def days_of_payables(self):
-        """
-        Calculate and return the Number of Days Payables Ratio.
+        """Calculate and return the Number of Days Payables Ratio.
 
         Returns:
         --------
@@ -1248,7 +895,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1259,8 +906,7 @@ class fAnalyze:
         return self.ratios._days_of_payables()
 
     def cash_conversion_cycle(self):
-        """
-        Calculate and return the Cash Conversion Cycle (CCC).
+        """Calculate and return the Cash Conversion Cycle (CCC).
 
         Returns:
         --------
@@ -1268,7 +914,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required component data is missing.
+            FinancialDataNotLoadedError: If required component data is missing.
 
         Notes:
         ------
@@ -1278,8 +924,7 @@ class fAnalyze:
         return self.ratios._cash_conversion_cycle()
 
     def return_on_equity(self):
-        """
-        Calculate and return the Return on Equity (ROE).
+        """Calculate and return the Return on Equity (ROE).
 
         Returns:
         --------
@@ -1287,7 +932,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1298,8 +943,7 @@ class fAnalyze:
         return self.ratios._return_on_equity()
 
     def working_capital_turnover(self):
-        """
-        Calculate and return the Working Capital Turnover Ratio.
+        """Calculate and return the Working Capital Turnover Ratio.
 
         Returns:
         --------
@@ -1307,7 +951,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1318,8 +962,7 @@ class fAnalyze:
         return self.ratios._working_capital_turnover()
 
     def fixed_asset_turnover(self):
-        """
-        Calculate and return the Fixed Asset Turnover Ratio.
+        """Calculate and return the Fixed Asset Turnover Ratio.
 
         Returns:
         --------
@@ -1327,7 +970,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1338,8 +981,7 @@ class fAnalyze:
         return self.ratios._fixed_asset_turnover()
 
     def total_asset_turnover(self):
-        """
-        Calculate and return the Total Asset Turnover Ratio.
+        """Calculate and return the Total Asset Turnover Ratio.
 
         Returns:
         --------
@@ -1347,7 +989,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1358,8 +1000,7 @@ class fAnalyze:
         return self.ratios._total_asset_turnover()
 
     def operating_return_on_assets(self):
-        """
-        Calculate and return the Operating Return on Assets (OROA).
+        """Calculate and return the Operating Return on Assets (OROA).
 
         Returns:
         --------
@@ -1367,7 +1008,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1378,8 +1019,7 @@ class fAnalyze:
         return self.ratios._operating_return_on_assets()
 
     def return_on_assets(self):
-        """
-        Calculate and return the Return on Assets (ROA).
+        """Calculate and return the Return on Assets (ROA).
 
         Returns:
         --------
@@ -1387,7 +1027,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1398,8 +1038,7 @@ class fAnalyze:
         return self.ratios._return_on_assets()
 
     def equity_multiplier(self):
-        """
-        Calculate and return the Equity Multiplier.
+        """Calculate and return the Equity Multiplier.
 
         Returns:
         --------
@@ -1407,7 +1046,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required balance sheet data is missing.
+            FinancialDataNotLoadedError: If required balance sheet data is missing.
 
         Notes:
         ------
@@ -1418,8 +1057,7 @@ class fAnalyze:
         return self.ratios._equity_multiplier()
 
     def return_on_invested_capital_pre_tax(self):
-        """
-        Calculate and return the Pre-Tax Return on Invested Capital (ROIC).
+        """Calculate and return the Pre-Tax Return on Invested Capital (ROIC).
 
         Returns:
         --------
@@ -1427,7 +1065,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1438,8 +1076,7 @@ class fAnalyze:
         return self.ratios._return_on_invested_capital_pre_tax()
 
     def return_on_invested_capital_after_tax(self):
-        """
-        Calculate and return the After-Tax Return on Invested Capital (ROIC).
+        """Calculate and return the After-Tax Return on Invested Capital (ROIC).
 
         Returns:
         --------
@@ -1447,7 +1084,7 @@ class fAnalyze:
 
         Raises:
         -------
-            ValueError: If required income statement or balance sheet data is missing.
+            FinancialDataNotLoadedError: If required income statement or balance sheet data is missing.
 
         Notes:
         ------
@@ -1459,18 +1096,7 @@ class fAnalyze:
 
 
 
-    ######################################################################
-    # Normalize financial statements for comparative analysis
-    ######################################################################
     
-    # The CommonSize and VerticalAnalysis methods provide tools for normalizing financial statements
-    # to facilitate comparison across companies and periods:
-    #
-    # - CommonSize: Expresses each line item as a percentage of a key figure (e.g., Total Revenue or Total Assets).
-    # - VerticalAnalysis: Presents each line item as a proportion of a statement total within the same period.
-    # 
-    # These approaches are useful for analyzing company structure, cost breakdowns, and trends,
-    # regardless of the absolute scale of the business.
     
     def CommonSize(self, financial_statement):
         """
@@ -1526,49 +1152,20 @@ class fAnalyze:
 
 
 
-    ######################################################################
-    # Write selected financial statements to an Excel file
-    ######################################################################
     
-    # The writeStatement method writes selected financial statements to an Excel file at the specified path. It allows for the   
-    # inclusion of standard or common size formats depending on the include_common_size flag. This method simplifies the process 
-    # of exporting financial data by providing options to export as standard numbers or as percentages of a key total figure,    
-    # making it versatile for comparative and period-over-period financial analysis.               
     
     def writeStatement(self, save_path, financial_statements=None, include_common_size=False):
-        """
-        Export one or more financial statements to an Excel file.
+        """Write selected statements to a new Excel workbook at save_path.
 
-        Parameters:
-        -----------
-            save_path : str
-                Path where the Excel file will be saved. If the file exists, it will be overwritten.
+        All three statements must be loaded. financial_statements may be a statement
+        alias or a list of aliases; a falsy value selects all statements. Aliases
+        include "Income Statement"/"I"/"IS", "Balance Sheet"/"B"/"BS", and
+        "Cash Flow Statement"/"C"/"CF". include_common_size=True selects
+        percentage columns alongside the original values.
 
-            financial_statements : str or list of str, optional
-                Names or aliases of financial statements to write. If None or 'all',
-                all available statements will be included. Valid identifiers include:
-                  - Income Statement: "I", "IS", "Income", "Income_Statement", "Income Statement"
-                  - Balance Sheet: "B", "BS", "Balance Sheet", "Balance_Sheet"
-                  - Cash Flow Statement: "C", "CF", "Cash", "Cash Flow", "Cash_Flow",
-                    "Cash Flow Statement", "Cash_Flow_Statement"
-
-            include_common_size : bool, optional
-                If True, write each statement in common size format (as percentages of a base figure).
-                If False, write standard absolute values. Defaults to False.
-
-        Returns:
-        -----------
-            None
-
-        Raises:
-        -----------
-            ValueError : If no valid financial statements are provided, or if identifiers are invalid.
-            Exception : Propagates errors from file I/O or Excel writing.
-
-        Notes:
-        -----------
-            This method simplifies exporting financial data for reporting or comparative analysis.
-            Supports both standard and common size formats for greater flexibility.
+        The output replaces an existing file at save_path. NoFinancialStatementsProvided
+        is raised if selection leaves no statements. Dataset-access errors propagate;
+        workbook-writing failures are reported as WorkbookSaveError.
         """
         self.__assert_data_available([self.income_statement, self.balance_sheet, self.cash_flow_statement])
 
@@ -1617,18 +1214,7 @@ class fAnalyze:
         except Exception as e:
             raise WorkbookSaveError(f"An error occurred while writing statements: {e}") from e
 
-    # __dir__ method provides dynamic introspection support for the fAnalyze instance.
-    #
-    # It constructs and returns a list of available attributes and methods based on which
-    # financial statements and dividend data are currently loaded and accessible.
-    #
-    # Only methods and properties relevant to the present data context are exposed—analysis
-    # and ratio methods appear if all core statements are loaded, and dividend-related
-    # methods appear only when both dividend data and report are available.
-    #
-    # This design enables more intuitive autocompletion, prevents confusion when certain
-    # data is missing, and helps interactive environments reflect only valid, actionable
-    # features at any point in time.    
+    # List analysis methods for interactive discovery according to loaded data.
     
     def __dir__(self):
         available_attributes = []       
@@ -1649,7 +1235,7 @@ class fAnalyze:
                 "fixed_asset_turnover", "total_asset_turnover", "operating_return_on_assets", "return_on_assets", "equity_multiplier",
                 "return_on_invested_capital_pre_tax", "return_on_invested_capital_after_tax",
             ])
-            if self.dividend_data is not None and self.dividend_report is not None:
+            if self._dividend_data is not None and self._dividend_report is not None:
                 available_attributes.extend([
                     "dividend_data", "dividend_report", "dividend_yield",
                     "ex_dividend_date", "annual_dividend"

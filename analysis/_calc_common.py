@@ -54,7 +54,6 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..strata_utils import IterDict
 
 
@@ -62,12 +61,6 @@ __all__ = ['Common_Size']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 class Common_Size:
     def __init__(self, analyze_instance): self.parent = analyze_instance
@@ -77,7 +70,7 @@ class Common_Size:
             if value == '--': return value
             try: return float(value)
             except ValueError: return value
-        df = df.applymap(convert_to_float)
+        df = df.map(convert_to_float)
         return df.reset_index(drop=False)
     def _CommonSize(self, financial_statement):
         valid_statements = {

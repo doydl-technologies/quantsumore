@@ -52,7 +52,6 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..proxy import Proxy
 
 __all__ = [
@@ -65,35 +64,12 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
-# Notes:
-# -----
-# This module provides a suite of pandas DataFrame subclasses specifically designed
-# to represent structured financial statement data. These classes offer a standardized
-# way to encapsulate, manipulate, and identify different financial statement types
-# (such as income statements, balance sheets, cash flow statements, and dividends)
-# within analytic workflows or financial data pipelines.
-# 
-# These DataFrame subclasses serve as the **standard containers** for all tabular
-# financial data within the Quantsumore stack. They are used by scraping agents,
-# API layers, and analytic tools to ensure financial statement data is easily
-# distinguishable and can be manipulated or validated according to its context.
-# 
-# The FinancialStatement subclasses do not enforce any column names, types, or
-# indexing by default. They serve as semantic wrappers to make statement type
-# explicit within codebases and data flows.
-# 
-# All subclasses inherit _constructor overrides to ensure pandas operations return the
-# appropriate subclass instance.
+# DataFrame subclasses label statement categories without enforcing a schema.
+# Pandas operations use FinancialStatement; single-dimensional results use Series.
 class FinancialStatement(pd.DataFrame):
     @property
     def _constructor(self):
@@ -102,7 +78,7 @@ class FinancialStatement(pd.DataFrame):
     def _constructor_sliced(self):
         return pd.Series
 
-# ────────── Financial Statements ──────────────────────────────── 
+# Financial statements.
 class IncomeStatement(FinancialStatement):
     pass
 
@@ -112,7 +88,7 @@ class BalanceSheet(FinancialStatement):
 class CashFlowStatement(FinancialStatement):
     pass
 
-# ────────── Dividend Reports ──────────────────────────────── 
+# Dividend reports.
 class DividendSummary(FinancialStatement):
     pass
 

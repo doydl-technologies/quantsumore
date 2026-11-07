@@ -53,18 +53,12 @@
 #
 
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...markup import idextract
+from ....markup import idextract
 from ...market_utils import CoinQuery
 from ...shape_tools import normalize_time, is_valid_dataframe
-from ...strata_utils import IterDict
-from ...proxy import Proxy
-from ...exceptions import (
-    # CryptoPipelineError,
-    # CryptoLiveQuoteError, 
-    # CryptoLiveQuoteNoDataError, 
-    # CryptoLiveQuoteUnavailableError,
-    # CryptoHistoricalError, 
+from ....strata_utils import IterDict
+from ....proxy import Proxy
+from ....exceptions import (
     CryptoHistoricalNoDataError, 
     CryptoHistoricalUnavailableError,
 )
@@ -73,15 +67,9 @@ from ...exceptions import (
 __all__ = ['historical']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 """
 Expected Input: Historical Cryptocurrency OHLCV API Response

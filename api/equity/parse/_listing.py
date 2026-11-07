@@ -55,54 +55,23 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # EquityPipelineError,
-    # IPOError,
+from ....proxy import Proxy
+from ....exceptions import (
     IPONoDataError,
     IPODataUnavailableError,
-    # LatestError,
-    # LatestNoDataError,
-    # LatestDataUnavailableError,
-    # HistoricalError,
-    # HistoricalNoDataError,
-    # HistoricalDataUnavailableError,
-    # LastTradeError,
-    # LastTradeNoDataError,
-    # LastTradeDataUnavailableError,
-    # QuoteStatisticsError,
-    # QuoteStatisticsValidationError,
-    # QuoteStatisticsNoDataError,
-    # QuoteStatisticsUnavailableError,
-    # CompanyProfileError,
-    # CompanyProfileValidationError,
-    # CompanyProfileNoDataError,
-    # CompanyProfileUnavailableError,
 )
-# from ...markup import idextract
 
 
 __all__ = ['ipo']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 
-######################################################################
-# DATA TYPE 3
-######################################################################
 """
 Expected Input: IPO Calendar API Response
 
@@ -246,7 +215,7 @@ class ipo:
         else: raise IPODataUnavailableError(f"Unsupported JSON type: {type(payload)}")
         if isinstance(node, dict) and len(node) == 1:
             key = next(iter(node))
-            if "+" in key: node = node[key]
+            if key.startswith(('https://', 'http://')): node = node[key]
         resp = node.get("response")
         if not isinstance(resp, dict): raise IPODataUnavailableError("Missing or invalid 'response' field")
         return resp

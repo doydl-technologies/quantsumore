@@ -59,7 +59,6 @@ from pathlib import Path
 import json
 from datetime import datetime, timedelta
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from quantsumore import APP_DATA_DIR
 
 
@@ -67,23 +66,16 @@ __all__ = ['JSON', 'SQLiteDBHandler']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 
 _APP_DATA_DIR = str(APP_DATA_DIR)
 
-######################################################################
 # JSON
-######################################################################
 
 class JSON:
     def __init__(self, filename=None, directory=None, json_data=None):
         self.json_data = json_data
+        self._batch = False
         directory = directory or _APP_DATA_DIR
         if json_data is None:
             if filename is None:
@@ -181,15 +173,13 @@ class JSON:
 
        
        
-######################################################################
-# SQLITE HANDLER
-######################################################################
+# SQLite metadata storage.
 
 class SQLiteDBHandler:
     def __init__(self, filename, directory=None, json_data=None):
         directory = directory or _APP_DATA_DIR
         filename_path, directory_path = Path(filename), Path(directory)
-        if directory_path.suffix:
+        if directory_path.is_file():
             filename_path, directory_path = directory_path, directory_path.parent
         if filename_path.is_absolute() or filename_path.parent != Path('.'):
             self.db_path, self.db_dir, self.filename = str(filename_path), str(filename_path.parent), filename_path.name
@@ -199,10 +189,12 @@ class SQLiteDBHandler:
         self.path = self.Path()
         self.conn = self.cursor = None
         self.json_data = json_data
+        self._batch = False
 
     def connect(self):
         if not self.conn:
-            self.conn = sqlite3.connect(self.db_path)
+            Path(self.db_dir).mkdir(parents=True, exist_ok=True)
+            self.conn = sqlite3.connect(self.db_path, timeout=30)
             self.cursor = self.conn.cursor()
 
     def close(self):
@@ -241,7 +233,8 @@ class SQLiteDBHandler:
             self.cursor.execute(
                 "INSERT INTO metadata (key, value) VALUES (?, ?)", ("created_at", now)
             )
-        self.conn.commit()
+        if not self._batch:
+            self.conn.commit()
 
     def parse_json(self):
         return [
@@ -271,7 +264,8 @@ class SQLiteDBHandler:
                 name=excluded.name, symbol=excluded.symbol, slug=excluded.slug,
                 is_active=excluded.is_active, status=excluded.status, rank=excluded.rank;
             ''', item)
-        self.conn.commit()
+        if not self._batch:
+            self.conn.commit()
 
     def insert_exchanges(self, exchanges):
         for item in exchanges:
@@ -281,7 +275,8 @@ class SQLiteDBHandler:
                 ON CONFLICT(exchangeId) DO UPDATE SET
                 exchangeName=excluded.exchangeName, exchangeSlug=excluded.exchangeSlug;
             ''', item)
-        self.conn.commit()
+        if not self._batch:
+            self.conn.commit()
 
     def insert_pairs(self, pairs):
         for item in pairs:
@@ -291,11 +286,15 @@ class SQLiteDBHandler:
                 ON CONFLICT(currencyId) DO UPDATE SET
                 currencySymbol=excluded.currencySymbol, currency=excluded.currency;
             ''', item)
-        self.conn.commit()
+        if not self._batch:
+            self.conn.commit()
 
     def file_exists(self): return os.path.exists(self.db_path)
     def get_creation_time(self):
         self.connect()
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
+        if self.cursor.fetchone() is None:
+            return None
         self.cursor.execute("SELECT value FROM metadata WHERE key='created_at'")
         result = self.cursor.fetchone()
         return result[0] if result else None
@@ -305,19 +304,36 @@ class SQLiteDBHandler:
             return self.db_path
         return None
            
-    def save(self):
+    def save(self, replace=False):
+        """Commit all metadata tables together; retain existing data on failure."""
+        # Validate every collection before opening a write transaction.
+        cryptos = self.parse_json()
+        exchanges = self.parse_exchanges()
+        pairs = self.parse_pairs()
         try:
-            self.connect(); self.ensure_database()
-            self.insert_data(self.parse_json())
-            self.insert_exchanges(self.parse_exchanges())
-            self.insert_pairs(self.parse_pairs())
-        except Exception as e:
-            print(f"Error during save: {e}")
-            self.conn.rollback()
+            self.connect()
+            self.cursor.execute("BEGIN IMMEDIATE")
+            self._batch = True
+            self.ensure_database()
+            if replace:
+                for table in ("cryptos", "exchanges", "pairs"):
+                    self.cursor.execute(f"DELETE FROM {table}")
+                self.cursor.execute(
+                    "UPDATE metadata SET value=? WHERE key='created_at'",
+                    (datetime.now().isoformat(),)
+                )
+            self.insert_data(cryptos)
+            self.insert_exchanges(exchanges)
+            self.insert_pairs(pairs)
+            self.conn.commit()
+        except Exception:
+            if self.conn is not None:
+                self.conn.rollback()
+            raise
         finally:
+            self._batch = False
             self.close()
 
-# _local_directory = str(APP_DATA_DIR)
 
 def __dir__():
     return __all__

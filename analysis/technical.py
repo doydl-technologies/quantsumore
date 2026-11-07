@@ -52,131 +52,14 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-"""
-technical: Unified Engine for Technical Indicator Computation & Signal Analysis
-════════════════════════════════════════════════════════════════════════════════
+"""Prepare historical OHLCV data and expose technical indicators and plots.
 
-Module Purpose
-────────────────────────────────────────────────────
-`technical` provides a single, robust interface for calculating, visualizing,
-and analyzing a full suite of technical indicators on historical financial data.
-Its flagship class, `tAnalyze`, is designed for analysts, quant developers,
-and automated trading systems that need reliable, extensible computation of
-trend, momentum, volatility, and volume-based signals for equities, crypto, or FX.
-
-Unlike “black box” wrappers, this module emphasizes **data validation,
-transparency, and extendibility**, with DataFrame-in/DataFrame-out idioms and
-plot-ready methods for every signal.
-
-Key Features
-────────────────────────────────────────────────────
-- **Unified API**: All indicator logic, signal detection, and plotting tools are accessed via the `tAnalyze` object.
-- **Schema-agnostic preprocessing**: Accepts nearly any time series format (crypto or equity), with automatic column normalization and type enforcement.
-- **Production-grade validation**: All methods raise descriptive exceptions for missing columns, bad data, or insufficient history.
-- **Rich indicator set**: Supports industry-standard signals (DMI/ADX, Aroon, OBV, MACD, RSI, Stochastic, MA/EMA/Bollinger Bands, ATR) with “get” and “plot” accessors for all.
-- **Signal detection**: Buy/sell/neutral/crossover and divergence signals are included for most indicators, enabling strategy backtesting or visual scanning.
-- **Self-contained plotting**: Every major indicator provides matplotlib visualizations with annotated signals and trend zones.
-
-Supported Indicators & Methods
-────────────────────────────────────────────────────
-• `DirectionalMovementIndex(period=14, adx_threshold=25)`  
-  Computes +DI, -DI, ADX, and trend signals (buy/sell, strong trend).
-• `AroonIndicator(period=25)`  
-  Calculates Aroon Up/Down and detects uptrend/downtrend/range signals.
-• `OnBalanceVolume()`  
-  OBV calculation, with price/OBV divergence detection and visualization.
-• `AccumulationDistributionLine()`  
-  Computes A/D Line, detects price-volume divergences, plots overlay.
-• `MACD(short_window=12, long_window=26, signal_window=9)`  
-  Full MACD, Signal, Histogram, and crossover/zero-line analysis.
-• `RelativeStrengthIndex(period=14)`  
-  RSI values, overbought/oversold detection, divergence, support/resistance mapping.
-• `FastStochasticOscillator(k_period=14, d_period=3)`  
-  %K/%D calculation, overbought/oversold, crosses, divergence.
-• `MovingAveragesAndBollingerBands(sma_period=20, ema_period=20, bb_period=20, bb_std=2)`  
-  SMA, EMA, Bollinger Bands, and all crossover signals.
-• `AverageTrueRange(atr_period=14)`  
-  ATR/volatility analysis, regime shifts, and volatility plotting.
-
-System Architecture & Workflow
-────────────────────────────────────────────────────
-1. **Data Preparation**
-   - Incoming data is normalized and validated by `tAnalyze.Dataframe`.
-   - Supports flexible naming for 'Symbol', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume', using regex-based matching.
-   - Dates are standardized and filtered to a single asset per object.
-
-2. **Indicator Computation**
-   - Each technical indicator is encapsulated in a dedicated sub-class, providing its own computation, signal detection, and plotting logic.
-   - Methods return enriched DataFrames (all columns preserved, new columns for signals).
-
-3. **Signal & Divergence Analysis**
-   - All indicators produce not only the “raw” values, but also columns for buy/sell/cross/divergence signals, aiding both manual and programmatic use.
-
-4. **Visualization**
-   - All core methods include matplotlib-powered plotting routines, with labeled signals, highlighted regions, and dual-axis overlays where appropriate.
-   - Plots are consistent, visually annotated, and ready for Jupyter, scripts, or web integration.
-
-5. **Error Handling & Robustness**
-   - All methods verify period sufficiency and input schema.
-   - Missing or insufficient data triggers clear, instructive error messages.
-
-Example Usage
-────────────────────────────────────────────────────
-from quantsumore.api import tAnalysis
-
-# Load raw price data (works with equities or crypto)
-df = pd.DataFrame({
-    'Date': pd.date_range('2020-01-01', periods=100),
-    'High': np.random.rand(100)*100+150,
-    'Low': np.random.rand(100)*100+100,
-    'Open': np.random.rand(100)*100+125,
-    'Close': np.random.rand(100)*100+130,
-    'Volume': np.random.randint(100, 1000, 100),
-    'Symbol': ['AAPL']*100
-})
-analyze = tAnalysis(df)
-
-# Compute indicators and get DataFrames or plots
-dmi = analyze.DirectionalMovementIndex(period=14, adx_threshold=25)
-dmi.get_signals()
-dmi.plot_indicators()
-
-macd = analyze.MACD()
-macd.plot_macd()
-
-rsi = analyze.RelativeStrengthIndex()
-rsi.plot_rsi()
-
-Design Features
-────────────────────────────────────────────────────
-• Extensible by design: Add new indicators or signal logic by subclassing and plugging into the tAnalyze framework.
-• Pure DataFrame logic: All calculations are pandas-native; intermediate and final values always accessible.
-• No external dependencies except pandas, numpy, matplotlib.
-• Error transparency: All user-facing errors are descriptive and suggest correctable input problems.
-
-• Integration & Usage Notes
-────────────────────────────────────────────────────
-• Best used as a backend analysis layer for dashboards, scripts, or batch processing pipelines.
-• Visualization is matplotlib-based; for production UIs, access .get_*() methods and plot elsewhere as needed.
-• To analyze multiple tickers, instantiate one tAnalyze per symbol.
-• To avoid column name conflicts, only pass data for a single asset per instance.
-
-Warnings & Best Practices
-────────────────────────────────────────────────────
-• Ensure at least max(period) unique dates for the desired indicator before calling methods.
-• Data must include 'Open', 'High', 'Low', 'Close', 'Volume', and 'Date'; column names are flexible but must match the schema after normalization.
-• Always inspect returned DataFrames before using buy/sell signals in live trading logic.
-• Indicators are intended for research and educational purposes; verify any trading strategy with robust backtesting.
-
-Available Classes
-────────────────────────────────────────────────────
-• tAnalyze — Unified interface for technical analysis
-• All indicator-specific classes are accessed through tAnalyze methods
-"""
+The analysis object normalizes column labels, identifies a single security and
+checks available history before indicator calculations. Indicator objects
+provide numeric results, legacy signal heuristics and plotting methods."""
 import re
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..date_parser import dtparse
 from ..proxy import Proxy
 from ..exceptions import DataInitializationError
@@ -196,152 +79,45 @@ __all__ = ['tAnalyze']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class tAnalyze:
-    """
-    Central interface for preprocessing historical price data and computing technical indicators,
-    providing a unified, object-oriented API for trend, momentum, volume, and volatility analysis.
+    """Prepare one security's OHLCV data and construct indicator objects.
 
-    Purpose:
-    --------
-        The `tAnalyze` class orchestrates the end-to-end workflow for technical analysis.
-        It standardizes raw price data (cryptocurrency or equity), validates structure, and
-        exposes a suite of methods for generating industry-standard technical indicators.
+    Column names are mapped explicitly or inferred. If Symbol is absent, ticker
+    can supply it. When multiple symbols are present, rows for the first symbol
+    are selected. Dates are normalized to YYYY-MM-DD and prices/volume must
+    convert to numeric values.
 
-    Workflows:
-    ----------
-        - Data preprocessing: Load and standardize OHLCV data for a single symbol, with automatic
-          column mapping and type conversion.
-        - Indicator calculation: Compute trend, momentum, volume, and volatility metrics using
-          specialized indicator classes.
-        - Symbol consistency: Ensure all operations are performed on a single, validated symbol.
-
-    Attributes:
-    -----------
-        dataframe : Dataframe
-            Helper object responsible for preprocessing, validating, and structuring the input data.
-        df : pandas.DataFrame
-            Standardized OHLCV data for the selected symbol, with consistent column names and data types.
-        ticker : str
-            The ticker symbol or asset identifier for the loaded data.
-
-    Methods:
-    --------
-        DirectionalMovementIndex(period=14, adx_threshold=25)
-            Compute the DMI and ADX indicators to measure directional strength and trend quality.
-
-        AroonIndicator(period=25)
-            Compute the Aroon Up and Aroon Down indicators to identify emerging trends.
-
-        OnBalanceVolume()
-            Compute the OBV indicator to analyze price-volume relationships.
-
-        AccumulationDistributionLine()
-            Compute the A/D Line to assess the cumulative flow of volume.
-
-        MACD(short_window=12, long_window=26, signal_window=9)
-            Compute MACD, Signal line, and MACD Histogram for momentum analysis.
-
-        RelativeStrengthIndex(period=14)
-            Compute the RSI to identify overbought and oversold conditions.
-
-        FastStochasticOscillator(k_period=14, d_period=3)
-            Compute %K and %D lines for stochastic momentum evaluation.
-
-        MovingAveragesAndBollingerBands(sma_period=20, ema_period=20, bb_period=20, bb_std=2)
-            Compute SMA, EMA, and Bollinger Bands for trend and volatility analysis.
-
-        AverageTrueRange(atr_period=14)
-            Compute the ATR to measure market volatility.
-
-    Notes:
-    ------
-        - Automatically detects and renames columns for standard OHLCV format if column_map is not provided.
-        - Supports generating 'Symbol' column from a provided `ticker` when missing from data.
-        - Ensures that only one unique symbol is present in the dataset for consistent analysis.
-        - Date values are normalized to 'YYYY-MM-DD' format.
-        - Raises detailed errors for missing columns, type conversion failures, or insufficient data length.
-
-    Example:
-    --------
-        >>> data = pd.DataFrame({
-        ...     'Date': pd.date_range(start='2020-01-01', periods=100),
-        ...     'High': np.random.rand(100) * 100 + 150,
-        ...     'Low': np.random.rand(100) * 100 + 100,
-        ...     'Open': np.random.rand(100) * 100 + 125,
-        ...     'Close': np.random.rand(100) * 100 + 130,
-        ...     'Volume': np.random.randint(100, 1000, size=100),
-        ...     'Symbol': ['AAPL'] * 100
-        ... })
-        >>> analyze = tAnalyze(data)
-        >>> dmi = analyze.DirectionalMovementIndex(period=14, adx_threshold=25)
-        >>> aroon = analyze.AroonIndicator(period=25)
-        >>> obv = analyze.OnBalanceVolume()
-        >>> adl = analyze.AccumulationDistributionLine()
-        >>> macd = analyze.MACD()
-        >>> rsi = analyze.RelativeStrengthIndex()
-        >>> fast_stochastic = analyze.FastStochasticOscillator()
-        >>> moving_avg_bb = analyze.MovingAveragesAndBollingerBands()
-        >>> atr = analyze.AverageTrueRange()
+    Indicator methods return objects exposing calculated data and plots.
+    Periods count observations, not calendar days. Numeric warm-up gaps and
+    legacy heuristic signal labels are retained in the returned data.
     """
     def __init__(self, df, column_map=None, ticker=None, require_all=True):
-        """
-        Initialize a `tAnalyze` instance with validated and standardized historical price data.
+        """Normalize historical prices for indicator calculations.
 
-        Parameters:
-        -----------
-            df : pandas.DataFrame
-                Source OHLCV data containing columns for symbol, date, open, high, low, close, and volume.
-                Column names can be in any format; mapping and auto-detection will be applied.
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Historical data with Symbol, Date, Open, High, Low, Close and Volume.
+        column_map : dict, optional
+            Source column names mapped to standard names. Unmapped names are inferred.
+        ticker : str, optional
+            Symbol to assign when the input has no Symbol column.
+        require_all : bool, default True
+            Retain only standard columns when True. All seven standard columns
+            are still required after normalization when False.
 
-            column_map : dict or None, optional
-                Explicit mapping from the DataFrame’s existing column names to the required
-                standard names: {'Symbol','Date','Open','High','Low','Close','Volume'}.
-                Example: {'date_time':'Date', 'open_price':'Open', ...}.
-                Can be partial; any unmapped columns will be auto-detected.
-                Default is None.
-
-            ticker : str or None, optional
-                Symbol to assign if the input DataFrame has no 'Symbol' column.
-                Used to synthesize the column when missing. Default is None.
-
-            require_all : bool, optional
-                If True (default), all required columns must be present after mapping.
-                If False, only critical columns are required, and 'Symbol' may be generated from `ticker`.
-
-        Initializes:
-        -----------
-            dataframe : Dataframe
-                Preprocessing helper instance containing validated and standardized OHLCV data.
-            df : pandas.DataFrame
-                The standardized OHLCV DataFrame ready for technical analysis.
-            ticker : str
-                The symbol for the loaded dataset, taken from the first row of 'Symbol'.
-
-        Raises:
-        -------
-            DataInitializationError
-                If preprocessing fails due to missing columns, invalid types, or empty data.
-
-        Notes:
+        Raises
         ------
-            - Automatically detects standard column names if not fully specified in `column_map`.
-            - Ensures only a single symbol is present in the dataset.
-            - Dates are normalized to 'YYYY-MM-DD' format before analysis.
-            - Prints a success message with the loaded symbol if initialization completes successfully.
-        """    	
+        DataInitializationError
+            If preprocessing fails. Successful initialization prints the symbol.
+        """
         self.dataframe = None
         self.df = None
         self.ticker = None
@@ -364,10 +140,7 @@ class tAnalyze:
         ]
 
     class Dataframe:
-        """
-        A class to preprocess and validate data for technical analysis. This class is 
-        designed to handle and standardize data for both cryptocurrency and equity datasets.
-        """	
+        """Normalize column names, numeric values and dates, then select the first symbol."""
         def __init__(self, df: pd.DataFrame, column_map=None, ticker=None, require_all=True):
             if df.empty:
                 raise ValueError("DataFrame is empty")
@@ -400,7 +173,6 @@ class tAnalyze:
             if 'Date' not in final_map.values() and 'Timestamp' in self.df.columns:
                 final_map['Timestamp'] = 'Date'
 
-            # Auto-detect the rest
             def find_best_matches(df):
                 keyword_map = {
                     'Symbol': ['ticker', 'symbol'],
@@ -485,298 +257,78 @@ class tAnalyze:
         if unique_dates < period:
             raise ValueError(f"Insufficient data: The DataFrame contains only {unique_dates} unique dates, but at least {period} unique dates are required.")
       
-    # ────────── Call Indicators ──── 
     def DirectionalMovementIndex(self, period=14, adx_threshold=25):
+        """Return a DMI/ADX indicator object.
+
+        period controls Wilder smoothing (default 14); adx_threshold labels trend
+        strength (default 25). The object exposes numeric results, heuristic signals
+        and indicator/trend-strength plots.
         """
-        Calculate and analyze the Directional Movement Index (DMI) and Average Directional Index (ADX)
-        for financial time series data.
-
-        The Directional Movement Index is a technical analysis indicator used to measure the strength and direction
-        of a market trend. It includes two main components, +DI (positive directional indicator) and -DI (negative
-        directional indicator), which are used to identify bullish or bearish trends. The ADX (Average Directional
-        Index) measures the strength of the trend. This class also provides methods to generate buy/sell signals
-        based on the indicators and the strength of the trend using ADX.
-
-        Parameters:
-        -----------
-        period : int
-            The period for calculating the DMI and ADX, default is 14.
-        adx_threshold : float
-            The ADX threshold to classify trend strength, default is 25.
-
-        Methods:
-        --------        
-        _calculate_indicators():
-            Computes the True Range (TR), +DM, -DM, ATR, +DI, -DI, DX, and ADX indicators.
-        _calculate_signals():
-            Generates buy/sell signals and identifies strong trends based on +DI, -DI, and ADX values.
-        get_signals():
-            Returns a DataFrame with calculated indicators and generated buy/sell signals.
-        get_trend_strength():
-            Classifies the trend strength based on ADX values and returns a DataFrame with the trend classification.
-        plot_indicators():
-            Plots the +DI, -DI, and ADX indicators to visualize trend signals and market strength.
-        plot_trend_strength():
-            Plots the ADX values along with trend strength classifications, highlighting areas of strong trends.
-        """        
-        # return self._DirectionalMovementIndex(self, period, adx_threshold)
         return _DirectionalMovementIndex(self, period, adx_threshold)        
        
     def AroonIndicator(self, period=25):
+        """Return an Aroon Up/Down indicator object.
+
+        period counts elapsed observations (default 25, requiring 26 prices).
+        The object exposes Aroon values, heuristic trend labels and a plot.
         """
-        Calculate and analyze the Aroon Indicator for a given dataset.
-
-        The AroonIndicator class computes the Aroon Up and Aroon Down indicators for a financial dataset,
-        detects trend signals and consolidations based on these indicators, and provides visualization methods
-        to aid in technical analysis. It operates on a DataFrame containing financial data and supports both 
-        cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            period (int, optional): The period over which to calculate the Aroon indicators. Default is 25 days.
-
-        Methods:
-        --------
-            _calculate_aroon():
-                Calculates the Aroon Up and Aroon Down indicators and stores them in the DataFrame.
-
-            _detect_trends():
-                Detects trends and consolidations based on Aroon Up and Aroon Down interactions.
-
-            get_aroon():
-                Returns the DataFrame with the Aroon Up, Aroon Down, and Trend Signal columns.
-
-            plot_aroon():
-                Plots the Aroon Up and Aroon Down indicators, highlighting areas of detected trend signals.
-        """	        
         return _AroonIndicator(self, period)
        
     def OnBalanceVolume(self):
+        """Return an On-Balance Volume indicator object.
+
+        The object exposes OBV values, heuristic divergence labels and a plot.
         """
-        Calculate and analyze On-Balance Volume (OBV) for a given dataset.
-
-        The OnBalanceVolume class computes the On-Balance Volume (OBV) for a financial dataset,
-        detects divergences between OBV and price, and provides visualization methods to aid in
-        technical analysis. It operates on a DataFrame containing financial data and supports
-        both cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            df (pandas.DataFrame): DataFrame containing financial data with 'Date', 'Close', and 'Volume' columns.
-        
-        Methods:
-        --------
-            _calculate_obv():
-                Calculates the On-Balance Volume (OBV) and stores it in the DataFrame.
-
-            get_obv():
-                Returns the DataFrame with the OBV column included.
-
-            detect_divergence():
-                Detects divergence between OBV and price and returns a DataFrame with detected divergence points.
-            
-            plot_obv_with_divergence():
-                Plots the OBV and closing price, highlighting points where divergence between OBV and price occurs.
-        """        
         return _OnBalanceVolume(self)
 
     def AccumulationDistributionLine(self):
+        """Return an Accumulation/Distribution Line indicator object.
+
+        The object exposes cumulative money flow, heuristic divergence labels and
+        a plot.
         """
-        Calculate and analyze the Accumulation/Distribution (A/D) Line for a given dataset.
-
-        The AccumulationDistributionLine class computes the Accumulation/Distribution (A/D) Line for a financial dataset,
-        detects divergences between the A/D Line and the price, and provides visualization methods to aid in
-        technical analysis. It operates on a DataFrame containing financial data and supports both cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            df (pandas.DataFrame): DataFrame containing financial data with 'Date', 'Close', 'High', 'Low', and 'Volume' columns.
-
-        Methods:
-        --------
-            _calculate_ad_line():
-                Calculates the Accumulation/Distribution (A/D) Line and stores it in the DataFrame.
-
-            get_ad_line():
-                Returns the DataFrame with the A/D Line column included.
-
-            detect_divergence():
-                Detects divergence between the A/D Line and price and returns a DataFrame with detected divergence points.
-            
-            plot_ad_line_with_divergence():
-                Plots the A/D Line and closing price, highlighting points where divergence between the A/D Line and price occurs.
-        """        
         return _AccumulationDistributionLine(self)
 
     def MACD(self, short_window=12, long_window=26, signal_window=9):
+        """Return a MACD indicator object.
+
+        short_window, long_window and signal_window count observations, with
+        defaults 12, 26 and 9. The object exposes SMA-seeded EMA differences,
+        signal/histogram values, heuristic crossover labels and a plot.
         """
-        Calculate and analyze the Moving Average Convergence Divergence (MACD) for a given dataset.
-
-        The MACD class computes the MACD line, Signal line, and MACD Histogram for a financial dataset,
-        detects crossovers between the MACD line and Signal line, and provides visualization methods
-        to aid in technical analysis. It operates on a DataFrame containing financial data and supports
-        both cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            short_window (int): The period for the short-term EMA, default is 12 days.
-            long_window (int): The period for the long-term EMA, default is 26 days.
-            signal_window (int): The period for the Signal line EMA, default is 9 days.
-
-        Methods:
-        --------
-            _calculate_macd():
-                Calculates the MACD line, Signal line, and MACD Histogram and stores them in the DataFrame.
-
-            _detect_crossovers():
-                Detects crossovers between the MACD line and the Signal line, as well as the MACD line's position
-                relative to the zero line to identify bullish and bearish signals.
-
-            get_macd():
-                Returns the DataFrame with the MACD line, Signal line, Histogram, and crossover signals.
-
-            plot_macd():
-                Plots the MACD line, Signal line, and MACD Histogram, highlighting crossover signals.
-        """        
         return _MACD(self, short_window, long_window, signal_window)
 
     def RelativeStrengthIndex(self, period=14):
+        """Return a Wilder-smoothed RSI indicator object.
+
+        period defaults to 14 observations. The object exposes RSI values,
+        threshold-crossing and divergence heuristics, and a plot.
         """
-        Calculate and analyze the Relative Strength Index (RSI) for a given dataset.
-
-        The RelativeStrengthIndex class computes the RSI for a financial dataset, detects overbought and
-        oversold conditions, identifies divergence between RSI and price, and detects support and resistance
-        levels using RSI. It operates on a DataFrame containing financial data and is applicable to both
-        cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            period (int): The period for calculating RSI, default is 14 days.
-
-        Methods:
-        --------
-            _calculate_rsi():
-                Calculates the RSI based on the specified period and stores it in the DataFrame.
-
-            _detect_overbought_oversold():
-                Detects overbought and oversold conditions based on RSI values, and generates buy/sell signals.
-
-            _detect_divergence():
-                Detects divergence between RSI and price by comparing their trends.
-
-            _detect_support_resistance():
-                Detects support and resistance levels using RSI values.
-
-            get_rsi():
-                Returns the DataFrame with the RSI, overbought/oversold signals, buy/sell signals, divergence, and support/resistance levels.
-
-            plot_rsi():
-                Plots the RSI with overbought/oversold levels, divergence points, and support/resistance levels.
-        """        
         return _RelativeStrengthIndex(self, period)
        
     def FastStochasticOscillator(self, k_period=14, d_period=3):
+        """Return a stochastic oscillator indicator object.
+
+        k_period defaults to 14 observations; d_period defaults to 3 for smoothing
+        %K into %D. The object exposes both lines, heuristic labels and a plot.
         """
-        Calculate and analyze the Fast Stochastic Oscillator for a given dataset.
-
-        The FastStochasticOscillator class computes the %K and %D lines of the Stochastic Oscillator, 
-        detects overbought and oversold conditions, identifies crosses between the %K and %D lines, 
-        and analyzes divergence between the Stochastic Oscillator and price. It operates on a DataFrame 
-        containing financial data and is suitable for both cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            k_period (int): The period over which to calculate the %K line. Default is 14 days.
-            d_period (int): The period over which to calculate the %D line. Default is 3 days.
-
-        Methods:
-        --------
-            _calculate_stochastic():
-                Calculates the %K and %D lines of the Stochastic Oscillator and stores them in the DataFrame.
-
-            _detect_overbought_oversold():
-                Detects overbought and oversold conditions based on the %K line values.
-
-            _detect_crosses():
-                Detects intersections (crosses) between the %K and %D lines, signaling potential momentum shifts.
-
-            _detect_divergence():
-                Detects divergence between the Stochastic Oscillator and price by comparing their trends.
-
-            get_stochastic():
-                Returns the DataFrame with the Stochastic Oscillator %K, %D lines, and detected signals.
-
-            plot_stochastic():
-                Plots the %K and %D lines of the Stochastic Oscillator, highlighting overbought/oversold conditions, crosses, and divergence.
-        """        
         return _FastStochasticOscillator(self, k_period, d_period)
 
     def MovingAveragesAndBollingerBands(self, sma_period=20, ema_period=20, bb_period=20, bb_std=2):
+        """Return a moving-average and Bollinger-band indicator object.
+
+        sma_period, ema_period and bb_period default to 20 observations.
+        bb_std defaults to 2 population standard deviations. The object exposes
+        SMA, SMA-seeded EMA, bands, heuristic crossovers and a plot.
         """
-        A class to compute and analyze Simple Moving Averages (SMA), Exponential Moving Averages (EMA), 
-        and Bollinger Bands for a given dataset.
-
-        The MovingAveragesAndBollingerBands class calculates the SMA, EMA, and Bollinger Bands, and detects 
-        crossover signals between the SMA and EMA. It operates on a DataFrame containing financial data and 
-        is suitable for both cryptocurrency and equity datasets.
-
-        Parameters:
-        -----------
-            sma_period (int): The period over which to calculate the Simple Moving Average. Default is 20 days.
-            ema_period (int): The period over which to calculate the Exponential Moving Average. Default is 20 days.
-            bb_period (int): The period over which to calculate the Bollinger Bands. Default is 20 days.
-            bb_std (float): The number of standard deviations to use for the Bollinger Bands. Default is 2.
-
-        Methods:
-        --------
-            _calculate_sma():
-                Calculates the Simple Moving Average (SMA) and adds it to the DataFrame.
-
-            _calculate_ema():
-                Calculates the Exponential Moving Average (EMA) and adds it to the DataFrame.
-
-            _calculate_bollinger_bands():
-                Calculates the Bollinger Bands (Upper, Middle, and Lower) and adds them to the DataFrame.
-
-            _detect_crossovers():
-                Detects when the EMA crosses above or below the SMA and adds these signals to the DataFrame.
-
-            get_indicators():
-                Returns the DataFrame with SMA, EMA, Bollinger Bands, and detected signals.
-
-            plot_indicators():
-                Plots the Close price, SMA, EMA, Bollinger Bands, and highlights Buy and Sell signals on a chart.
-        """        
         return _MovingAveragesAndBollingerBands(self, sma_period, ema_period, bb_period, bb_std)
 
     def AverageTrueRange(self, atr_period=14):
+        """Return a Wilder-smoothed ATR indicator object.
+
+        atr_period defaults to 14 observations. The object exposes ATR values,
+        a plot and volatility-shift labels.
         """
-        A class to compute and analyze the Average True Range (ATR) of a financial time series.
-
-        The AverageTrueRange class calculates the ATR, which is a measure of volatility in a time series. 
-        ATR is used to understand market volatility and can assist in determining trade positions and risk management.
-
-        Parameters:
-        -----------
-            atr_period (int): The period over which to calculate the ATR. Default is 14 days.
-
-        Methods:
-        --------
-            _calculate_tr():
-                Calculates the True Range (TR) for each period and adds it to the DataFrame.
-
-            _calculate_atr():
-                Calculates the Average True Range (ATR) based on the True Range and adds it to the DataFrame.
-
-            get_atr():
-                Returns the DataFrame with the ATR and other relevant columns.
-
-            plot_atr():
-                Plots the ATR alongside the closing price on a chart.
-
-            identify_volatility_shifts():
-                Identifies and prints periods of expanding or contracting volatility based on changes in ATR.
-        """        
         return _AverageTrueRange(self, atr_period)
 
 def __dir__():

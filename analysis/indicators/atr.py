@@ -52,25 +52,20 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['AverageTrueRange']
 
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
+
+
+from ._averages import seeded_average
 
 
 class AverageTrueRange:
@@ -79,10 +74,8 @@ class AverageTrueRange:
         self.df = self.parent.df
         self.atr_period = atr_period
 
-        # Verify sufficient data before proceeding
-        self.parent.verify_period_sufficiency(self.atr_period)
+        self.parent.verify_period_sufficiency(self.atr_period + 1)
 
-        # Calculate indicators and signals
         self._calculate_atr()
 
     def _calculate_tr(self):
@@ -95,7 +88,8 @@ class AverageTrueRange:
     def _calculate_atr(self):
         """Calculate the Average True Range (ATR) based on the True Range."""
         self._calculate_tr()
-        self.df['ATR'] = self.df['TR'].rolling(window=self.atr_period).mean()
+        self.df.loc[self.df.index[0], 'TR'] = float('nan')
+        self.df['ATR'] = seeded_average(self.df['TR'], self.atr_period, start=self.atr_period, alpha=1 / self.atr_period)
 
     def get_atr(self):
         """Return the DataFrame with the ATR."""
@@ -105,10 +99,8 @@ class AverageTrueRange:
         """Plot the ATR alongside the closing price."""
         plt.figure(figsize=(14, 8))
 
-        # Plot Close Price
         plt.plot(self.df['Date'], self.df['Close'], label='Close Price', color='black')
 
-        # Plot ATR
         plt.plot(self.df['Date'], self.df['ATR'], label=f'ATR {self.atr_period}', color='blue')
 
         plt.title('Average True Range (ATR)')

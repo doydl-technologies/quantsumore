@@ -54,14 +54,9 @@
 
 import re
 import urllib.parse
-# import warnings
 
 __all__ = [
-    # API Key Errors 
-    "APIKeyError",
-    "APIKeyRequiredError",
     "APIRequestError",    
-    "APIQuotaError",   
 
     # CPI (Consumer Price Index) 
     "CPIError",
@@ -176,34 +171,18 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# ══════════════════════════════════════
 # API Errors
-# ══════════════════════════════════════
-# ├── Standard Error
-class APIKeyError(Exception):
-    """Raised when there is a problem with the API key."""
-    pass
    
-# ├── API Key Required Error
-class APIKeyRequiredError(Exception):
-    """Raised when an API key is required but not provided."""
-    pass
    
 class APIRequestError(RuntimeError):
-    """Raised when an HTTP request through our relay fails."""
+    """Wrap a provider request failure while retaining its HTTP status."""
     import requests
 
-    def __init__(self, original_exception: requests.exceptions.HTTPError):
+    def __init__(self, original_exception: Exception):
         msg = str(original_exception)
         msg = re.sub(r'\s*for url:.*$', '', msg, flags=re.IGNORECASE)
-        status = getattr(original_exception.response, "status_code", None)
+        status = getattr(getattr(original_exception, "response", None), "status_code", None)
         if status:
             full_msg = f"HTTP Error {status}: {msg}"
         else:
@@ -212,30 +191,18 @@ class APIRequestError(RuntimeError):
         self.__cause__ = original_exception
         self.status_code = status
         
-# ├── Quota Error
-class APIQuotaError(Exception):
-    """Raised when the current API key does not have enough quota for the requested operation."""
-    def __init__(self, needed: int, available: int):
-        self.needed = needed
-        self.available = available
-        super().__init__(f"Insufficient quota: need {needed}, have {available}.")
         
-# ══════════════════════════════════════
 #  Financials Exceptions
-# ══════════════════════════════════════
-# ├── Base Error 
 class FinancialsError(Exception):
     """Base exception for financials-related errors."""
     pass
 
-# ├── Statement Unavailable 
 class FinancialStatementUnavailableError(FinancialsError):
     """
     Raised when a requested financial statement is unavailable or invalid.
     """
     pass
 
-# ├── Data Not Loaded Errors 
 class FinancialDataNotLoadedError(FinancialsError):
     """
     Raised when the requested financial statement data has not been loaded.
@@ -248,15 +215,11 @@ class DividendDataNotLoadedError(FinancialsError):
     """
     pass
 
-# ══════════════════════════════════════
 #  Dividend Exceptions
-# ══════════════════════════════════════
-# ├── Base Error 
 class DividendHistoryError(Exception):
     """Base exception for dividend_history errors."""
     pass
 
-# ├── No Data Error 
 class DividendHistoryNoDataError(DividendHistoryError):
     """
     Raised when the Nasdaq API returns no dividend data for the requested ticker(s).
@@ -266,7 +229,6 @@ class DividendHistoryNoDataError(DividendHistoryError):
         fmt = "\n".join(f"{ticker}: {msg}" for ticker, msg in messages)
         super().__init__(f"No dividend data:\n{fmt}")
 
-# ├── Data Unavailable Error 
 class DividendHistoryUnavailableError(DividendHistoryError):
     """
     Raised when, after validation and parsing, no usable dividend summary/history
@@ -278,10 +240,7 @@ class DividendHistoryUnavailableError(DividendHistoryError):
             "open an issue at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ══════════════════════════════════════
 #  Statement Save Workbook Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class FinancialsExportError(Exception):
     """Base exception for all financial statement export errors."""
     pass
@@ -298,17 +257,12 @@ class WorkbookSaveError(FinancialsExportError):
     """Raised when saving the workbook fails."""
     pass
    
-# ══════════════════════════════════════
 #  Technical Analysis Errors
-# ══════════════════════════════════════
 class DataInitializationError(Exception):
     """Raised when tAnalyze fails to initialize properly due to invalid or missing data."""
     pass
    
-# ══════════════════════════════════════
 #  Ticker Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class StockTickerError(Exception):
     """Base exception for stock ticker lookup failures."""
     pass
@@ -317,10 +271,7 @@ class TickerNotFoundError(StockTickerError):
     """Raised when a stock ticker symbol cannot be found by the standard provider."""
     pass
 
-# ══════════════════════════════════════
 #  Currency Pair Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class CurrencyPairError(Exception):
     """Base exception for currency pair lookup failures."""
     pass
@@ -333,10 +284,7 @@ class InvalidCurrencyPairError(CurrencyPairError):
     """Raised when the currency pair format is invalid."""
     pass
 
-# ══════════════════════════════════════
 #  Crypto Slug Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class CryptoSlugError(Exception):
     """Base exception for coin slug lookup/validation failures."""
     pass
@@ -355,15 +303,11 @@ class CoinSlugIdMismatchError(CryptoSlugError):
 
 
         
-# ══════════════════════════════════════
 #   CPI Data Pipeline Exceptions
-# ══════════════════════════════════════
-# ├── Base Error
 class CPIError(Exception):
     """Base exception for all CPI data errors."""
     pass
 
-# ├── Date Parse Error 
 class CPIDateParseError(CPIError):
     """
     Raised if CPI HTML content date cannot be parsed or found.
@@ -371,26 +315,21 @@ class CPIDateParseError(CPIError):
     def __init__(self, message="Unable to parse end date from CPI HTML content."):
         super().__init__(message)
 
-# ├── Data Unavailable Error 
 class CPIDataUnavailableError(CPIError):
     """
     Raised when CPI data could not be fetched or processed into a DataFrame.
     """
-    def __init__(self):
-        super().__init__(
+    def __init__(self, message=None):
+        super().__init__(message or (
             "CPI data is currently unavailable. Please try again later. "
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
-        )
+        ))
 
-# ══════════════════════════════════════
 #   Crypto Data Pipeline Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class CryptoPipelineError(Exception):
     """Base exception for all crypto data pipeline errors."""
     pass
 
-# ├── Live Crypto Quote Exceptions 
 class CryptoLiveQuoteError(CryptoPipelineError):
     """Base exception for errors in fetching live crypto quote data."""
     pass
@@ -416,7 +355,6 @@ class CryptoLiveQuoteUnavailableError(CryptoLiveQuoteError):
             "https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Historical Crypto Quote Exceptions 
 class CryptoHistoricalError(CryptoPipelineError):
     """Base exception for errors in fetching crypto historical quote data."""
     pass
@@ -442,15 +380,11 @@ class CryptoHistoricalUnavailableError(CryptoHistoricalError):
             "https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ══════════════════════════════════════
 #   FX Data Pipeline Exceptions
-# ══════════════════════════════════════
-# ├── Base Error 
 class FXPipelineError(Exception):
     """Base exception for all FX data pipeline errors."""
     pass
 
-# ├── Historical FX Exceptions 
 class FXHistoricalError(FXPipelineError):
     """Base exception for fx_historical errors."""
 
@@ -477,7 +411,6 @@ class FXDataUnavailableError(FXHistoricalError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Interbank Exceptions 
 class FXInterbankError(FXPipelineError):
     """Base exception for interbank rate errors."""
 
@@ -501,7 +434,6 @@ class FXInterbankDataUnavailableError(FXInterbankError):
             "https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Live Bid/Ask Exceptions 
 class LiveBidAskError(FXPipelineError):
     """Base exception for live bid/ask errors."""
 
@@ -526,7 +458,6 @@ class LiveBidAskUnavailableError(LiveBidAskError):
             "report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Live Quote Exceptions 
 class LiveQuoteError(FXPipelineError):
     """Base exception for live_quote errors."""
 
@@ -558,7 +489,6 @@ class LiveQuoteUnavailableError(LiveQuoteError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Conversion Exceptions 
 class ConversionError(FXPipelineError):
     """Base exception for conversion errors."""
 
@@ -597,15 +527,11 @@ class ConversionUnavailableError(ConversionError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ══════════════════════════════════════
 #  Equity Data Pipeline Exceptions
-# ══════════════════════════════════════
-# ├── Base Error 
 class EquityPipelineError(Exception):
     """Base exception for all equity data pipeline errors."""
     pass
 
-# ├── IPO Exceptions 
 class IPOError(EquityPipelineError):
     """Base exception for IPO data errors."""
     pass
@@ -631,7 +557,6 @@ class IPODataUnavailableError(IPOError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Latest Price Exceptions 
 class LatestError(EquityPipelineError):
     """Base exception for errors in fetching latest price data."""
     pass
@@ -654,7 +579,6 @@ class LatestDataUnavailableError(LatestError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Historical Price Exceptions 
 class HistoricalError(EquityPipelineError):
     """Base exception for errors in fetching historical price data."""
     pass
@@ -677,7 +601,6 @@ class HistoricalDataUnavailableError(HistoricalError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Last Trade Exceptions 
 class LastTradeError(EquityPipelineError):
     """Base exception for errors in fetching last trade price data."""
     pass
@@ -700,7 +623,6 @@ class LastTradeDataUnavailableError(LastTradeError):
             "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
         )
 
-# ├── Quote Statistics Exceptions 
 class QuoteStatisticsError(EquityPipelineError):
     """Base exception for errors encountered in the quote_statistics pipeline."""
     pass
@@ -709,49 +631,20 @@ class QuoteStatisticsValidationError(QuoteStatisticsError):
     """
     Raised when HTML validation fails (e.g., wrong source, wrong symbol, or malformed markup).
     """
-    # def __init__(self, url=None, msg=None):
-    #     m = "Validation failed for Quote Statistics"
-    #     ticker = None
-    #     if url:
-    #         match = re.search(r"/quote/([A-Z0-9.-]+)", url)
-    #         if match:
-    #             ticker = match.group(1)
-    #         elif "?p=" in url:
-    #             query = re.search(r"\?p=([A-Z0-9.-]+)", url)
-    #             if query:
-    #                 ticker = query.group(1)
-    #         if ticker:
-    #             m += f" [Ticker: {ticker}]"
-    #         else:
-    #             m += " [Ticker: Unknown]"
-    #     if msg:
-    #         m += f" - {msg}"
-    #     super().__init__(m)
     pass    
         
 class QuoteStatisticsNoDataError(QuoteStatisticsError):
     """
     Raised when no usable quote statistics were found in the parsed HTML content.
     """
-    # def __init__(self, symbol=None):
-    #     m = "No quote statistics data found."
-    #     if symbol:
-    #         m += f" (Symbol: {symbol})"
-    #     super().__init__(m)
     pass    
 
 class QuoteStatisticsUnavailableError(QuoteStatisticsError):
     """
     Raised when, after all parsing and checks, no statistics data is returned.
     """
-    # def __init__(self):
-    #     super().__init__(
-    #         "Quote statistics are currently unavailable. Please try again later. "
-    #         "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
-    #     )
     pass    
 
-# ├── Profile Exceptions 
 class CompanyProfileError(EquityPipelineError):
     """Base exception for errors encountered in the profile pipeline."""
     pass
@@ -760,52 +653,21 @@ class CompanyProfileValidationError(CompanyProfileError):
     """
     Raised when HTML validation fails for the profile page.
     """
-    # def __init__(self, url=None, msg=None):
-    #     m = "Validation failed for Company Profile"
-    #     ticker = None
-    #     if url:
-    #         match = re.search(r"/quote/([A-Z0-9.-]+)", url)
-    #         if match:
-    #             ticker = match.group(1)
-    #         elif "?p=" in url:
-    #             query = re.search(r"\?p=([A-Z0-9.-]+)", url)
-    #             if query:
-    #                 ticker = query.group(1)
-    #         if ticker:
-    #             m += f" [Ticker: {ticker}]"
-    #         else:
-    #             m += " [Ticker: Unknown]"
-    #     if msg:
-    #         m += f" - {msg}"
-    #     super().__init__(m)
     pass
         
 class CompanyProfileNoDataError(CompanyProfileError):
     """
     Raised when no usable profile data (bio/details/executives) was found in the HTML.
     """
-    # def __init__(self, symbol=None):
-    #     m = "No company profile data found."
-    #     if symbol:
-    #         m += f" (Symbol: {symbol})"
-    #     super().__init__(m)
     pass
 
 class CompanyProfileUnavailableError(CompanyProfileError):
     """
     Raised when, after all parsing and checks, no profile data is returned.
     """
-    # def __init__(self):
-    #     super().__init__(
-    #         "Company profile data is currently unavailable. Please try again later. "
-    #         "If the issue persists, report it at https://github.com/cedricmoorejr/quantsumore."
-    #     )
     pass
 
-# ══════════════════════════════════════
 #  Treasury Yield Pipeline Errors
-# ══════════════════════════════════════
-# ├── Base Error 
 class TreasuryPipelineError(Exception):
     """Base exception for all Treasury yield pipeline errors."""
     pass
@@ -818,7 +680,6 @@ class TreasuryDataValidationError(TreasuryPipelineError):
     def __init__(self, message="Treasury input data failed validation."):
         super().__init__(message)
 
-# ├── No Data Error 
 class TreasuryNoDataError(TreasuryPipelineError):
     """
     Raised when no usable Treasury rates are found for the requested
@@ -827,7 +688,6 @@ class TreasuryNoDataError(TreasuryPipelineError):
     def __init__(self, message="No Treasury yield data available for the requested period/type."):
         super().__init__(message)
 
-# ├── Data Unavailable Error 
 class TreasuryDataUnavailableError(TreasuryPipelineError):
     """
     Raised when no output (dict or DataFrame) could be produced
@@ -844,28 +704,8 @@ class TreasuryDataUnavailableError(TreasuryPipelineError):
 
 
    
-# # ══════════════════════════════════════
-# #  Ratio Warnings
-# # ══════════════════════════════════════
-# class RatioCalcWarning(UserWarning):
-#     """Warning for non-fatal issues in financials calculations."""
-#     pass
    
 
-# # ══════════════════════════════════════
-# #  Fundamental Analysis Warning
-# # ══════════════════════════════════════
-# class FundamentalAnalysisWarning(UserWarning):
-#     """Non-fatal warning for financial data fetch/load issues."""
-#     pass
-# 
-# 
-# # ══════════════════════════════════════
-# #  Technical Analysis Warning
-# # ══════════════════════════════════════
-# class TechnicalAnalysisWarning(UserWarning):
-#     """Non-fatal warning for technical indicator results and anomalies."""
-#     pass
 
    
 def __dir__():

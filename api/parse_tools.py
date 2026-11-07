@@ -55,7 +55,6 @@
 
 import re
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..date_parser import dtparse
 
 
@@ -66,13 +65,6 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
-# Precompile regex patterns for efficiency
 
 def convert_to_float(value, roundn=0):
     """Convert string to float (removes $/comma), skips if '%' or '/' present."""

@@ -52,24 +52,20 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['RelativeStrengthIndex']
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas")
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
+
+
+from ._averages import seeded_average
 
 
 class RelativeStrengthIndex:
@@ -78,32 +74,27 @@ class RelativeStrengthIndex:
         self.df = self.parent.df
         self.period = period
 
-        # Verify sufficient data before proceeding
-        self.parent.verify_period_sufficiency(self.period)
+        self.parent.verify_period_sufficiency(self.period + 1)
 
-        # Calculate indicators and signals
+        self._calculate_rsi()
         self._detect_overbought_oversold()
         self._detect_divergence()
         self._detect_support_resistance()
 
     def _calculate_rsi(self):
         """Calculate the RSI based on the specified period."""
-        delta = self.df['Close'].diff(1)
-        gain = np.where(delta > 0, delta, 0)
-        loss = np.where(delta < 0, -delta, 0)
-
-        avg_gain = pd.Series(gain).rolling(window=self.period, min_periods=1).mean()
-        avg_loss = pd.Series(loss).rolling(window=self.period, min_periods=1).mean()
-
-        rs = avg_gain / avg_loss
-        self.df['RSI'] = 100 - (100 / (1 + rs))
+        delta = self.df['Close'].diff()
+        gain = seeded_average(delta.clip(lower=0), self.period, start=self.period, alpha=1 / self.period)
+        loss = seeded_average(-delta.clip(upper=0), self.period, start=self.period, alpha=1 / self.period)
+        total = gain + loss
+        self.df['RSI'] = (100 * gain / total).where(total != 0, 0)
 
     def _detect_overbought_oversold(self):
         """Detect overbought and oversold conditions."""
         self.df['Overbought'] = np.where(self.df['RSI'] > 70, 'Overbought', 'None')
         self.df['Oversold'] = np.where(self.df['RSI'] < 30, 'Oversold', 'None')
 
-        # Additional logic for waiting for RSI to cross below 70 or above 30
+        # Signal conditions distinguish threshold crossings from sustained extremes.
         self.df['Sell_Signal'] = np.where((self.df['RSI'] > 70) & (self.df['RSI'].shift(1) <= 70), 'Sell Signal', 'None')
         self.df['Buy_Signal'] = np.where((self.df['RSI'] < 30) & (self.df['RSI'].shift(1) >= 30), 'Buy Signal', 'None')
 
@@ -114,15 +105,15 @@ class RelativeStrengthIndex:
         self.df['RSI_Trend'] = np.where(self.df['RSI'] > self.df['RSI'].shift(1), 'up',
                                         np.where(self.df['RSI'] < self.df['RSI'].shift(1), 'down', 'flat'))
 
-        # Divergence occurs when price and RSI trends differ
+        # Label opposite one-period price and RSI changes as divergence.
         self.df['Divergence'] = np.where((self.df['Price_Trend'] == 'up') & (self.df['RSI_Trend'] == 'down'), 'Bearish Divergence',
                                          np.where((self.df['Price_Trend'] == 'down') & (self.df['RSI_Trend'] == 'up'), 'Bullish Divergence', 'None'))
 
     def _detect_support_resistance(self):
-        """Detect support and resistance levels using RSI."""
+        """Label crossings of RSI thresholds 70 and 30 as heuristic resistance/support signals."""
         self.df['Support_Resistance'] = 'None'
 
-        # During uptrends, RSI typically holds above 30 and reaches 70 or above
+        # Label crossings of 70 and 30; these are heuristic resistance/support signals.
         self.df['Support_Resistance'] = np.where((self.df['RSI'] >= 70) & (self.df['RSI'].shift(1) < 70), 'Resistance',
                                                  self.df['Support_Resistance'])
         self.df['Support_Resistance'] = np.where((self.df['RSI'] <= 30) & (self.df['RSI'].shift(1) > 30), 'Support',
@@ -136,18 +127,15 @@ class RelativeStrengthIndex:
         """Plot the RSI with overbought/oversold levels, divergence, and support/resistance levels."""
         plt.figure(figsize=(14, 8))
 
-        # Plot RSI
         plt.plot(self.df['Date'], self.df['RSI'], label='RSI', color='blue')
         plt.axhline(70, color='red', linestyle='--', label='Overbought (70)')
         plt.axhline(30, color='green', linestyle='--', label='Oversold (30)')
 
-        # Highlight overbought and oversold signals
         plt.scatter(self.df[self.df['Overbought'] == 'Overbought']['Date'],
                     self.df[self.df['Overbought'] == 'Overbought']['RSI'], color='red', label='Overbought Signal', marker='v')
         plt.scatter(self.df[self.df['Oversold'] == 'Oversold']['Date'],
                     self.df[self.df['Oversold'] == 'Oversold']['RSI'], color='green', label='Oversold Signal', marker='^')
 
-        # Highlight divergence points
         for div_type in ['Bearish Divergence', 'Bullish Divergence']:
             plt.scatter(self.df[self.df['Divergence'] == div_type]['Date'],
                         self.df[self.df['Divergence'] == div_type]['RSI'], label=div_type, marker='o', alpha=0.7)

@@ -55,33 +55,11 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # EquityPipelineError,
-    # IPOError,
-    # IPONoDataError,
-    # IPODataUnavailableError,
-    # LatestError,
-    # LatestNoDataError,
-    # LatestDataUnavailableError,
-    # HistoricalError,
-    # HistoricalNoDataError,
-    # HistoricalDataUnavailableError,
-    # LastTradeError,
+from ....proxy import Proxy
+from ....exceptions import (
     LastTradeNoDataError,
     LastTradeDataUnavailableError,
-    # QuoteStatisticsError,
-    # QuoteStatisticsValidationError,
-    # QuoteStatisticsNoDataError,
-    # QuoteStatisticsUnavailableError,
-    # CompanyProfileError,
-    # CompanyProfileValidationError,
-    # CompanyProfileNoDataError,
-    # CompanyProfileUnavailableError,
 )
-# from ...markup import idextract
 
 
 __all__ = ['last']
@@ -90,21 +68,12 @@ __all__ = ['last']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 
-######################################################################
-# DATA TYPE 2
-######################################################################
 """
 Expected Input: Latest Price & Historical Time-Series API Response ("spark" endpoint)
 
@@ -223,7 +192,7 @@ class last:
         else: raise LastTradeDataUnavailableError(f"Unsupported JSON type: {type(payload)}")
         if isinstance(node, dict) and len(node) == 1:
             key = next(iter(node))
-            if isinstance(key, str) and "+" in key: node = node[key]
+            if isinstance(key, str) and key.startswith(('https://', 'http://')): node = node[key]
         try: node = node["response"]["spark"]["result"]
         except Exception: raise LastTradeDataUnavailableError("Missing one of: 'response', 'spark', or 'result'")
         if not isinstance(node, list) or not node: raise LastTradeNoDataError("No 'result' data present")

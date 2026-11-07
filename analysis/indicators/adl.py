@@ -52,24 +52,16 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['AccumulationDistributionLine']
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class AccumulationDistributionLine:
@@ -77,21 +69,18 @@ class AccumulationDistributionLine:
         self.parent = parent
         self.df = self.parent.df
 
-        # Calculate
         self._calculate_ad_line()
         
     def _calculate_ad_line(self):
         """Calculate the Accumulation/Distribution (A/D) Line and store it in the DataFrame."""
-        # Calculate the Money Flow Multiplier (MFM)
+        # Money Flow Multiplier (MFM).
         self.df['MFM'] = ((self.df['Close'] - self.df['Low']) - (self.df['High'] - self.df['Close'])) / (self.df['High'] - self.df['Low'])
         
-        # Ensure there are no division by zero errors in case of High == Low
+        # A zero price range contributes no money flow.
         self.df['MFM'] = self.df['MFM'].fillna(0)
         
-        # Calculate the Money Flow Volume (MFV)
         self.df['MFV'] = self.df['MFM'] * self.df['Volume']
         
-        # Calculate the Accumulation/Distribution Line (A/D Line)
         self.df['AD_Line'] = self.df['MFV'].cumsum()
 
     def get_ad_line(self):
@@ -109,7 +98,7 @@ class AccumulationDistributionLine:
         self.df['AD_Trend'] = np.where(self.df['AD_Line'] > self.df['AD_Line'].shift(1), 'up', 
                                        np.where(self.df['AD_Line'] < self.df['AD_Line'].shift(1), 'down', 'flat'))
         
-        # Divergence occurs when price and A/D Line trends differ
+        # Label opposite one-period price and A/D changes as heuristic divergence.
         self.df['Divergence'] = np.where((self.df['Price_Trend'] == 'up') & (self.df['AD_Trend'] == 'down'), 'bearish',
                                          np.where((self.df['Price_Trend'] == 'down') & (self.df['AD_Trend'] == 'up'), 'bullish', 'none'))
         
@@ -133,7 +122,6 @@ class AccumulationDistributionLine:
         ax2.plot(self.df['Date'], self.df['AD_Line'], color='tab:green', label='A/D Line')
         ax2.tick_params(axis='y', labelcolor='tab:green')
 
-        # Highlight divergence points
         divergence_points = self.df[self.df['Divergence'] != 'none']
         ax1.scatter(divergence_points['Date'], divergence_points['Close'], color='red', label='Divergence', zorder=5)
 

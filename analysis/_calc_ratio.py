@@ -57,40 +57,25 @@ import re
 import io
 import sys
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..proxy import Proxy
 
 
 __all__ = ['Ratios']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 def _ratio_output_(func, *args, **kwargs):
+    """Call a function while capturing its printed output.
+
+    Return its non-None result only if it printed nothing; otherwise return
+    the captured text. Functions returning None without printing produce an
+    empty string. sys.stdout is restored on exit, but redirection is global
+    and is not synchronized across threads.
     """
-    Utility function to capture either the return value or any printed output from a function.
-
-    This function temporarily redirects sys.stdout to capture any text printed by the provided function.
-    - If the function returns a non-None value and nothing was printed, that value is returned.
-    - If the function prints output (e.g., error messages) but returns None, the captured output is returned as a string.
-
-    Args:
-        func (callable): The function to execute.
-        *args: Positional arguments to pass to func.
-        **kwargs: Keyword arguments to pass to func.
-
-    Returns:
-        Any: The return value from func if present and no output was printed; otherwise, the captured printed output as a string.
-    """	
     captured = io.StringIO() 
     old = sys.stdout       
     sys.stdout = captured  
@@ -104,55 +89,8 @@ def _ratio_output_(func, *args, **kwargs):
     return output 
    
 
-######################################################################
-# Calculate key financial ratios for company analysis
-######################################################################
 
-# The Ratios class provides a comprehensive set of methods for calculating key financial ratios
-# using data from a company’s financial statements. It covers all major categories—liquidity,
-# solvency, profitability, efficiency, and coverage—enabling robust analysis and benchmarking.
-# Each method is designed to pull and clean the required accounts from the parent Analyze instance,
-# handling missing data where possible.
-#
-# Methods:
-# - _dividend_yield:           Calculates and returns the dividend yield for the company.
-# - _ex_dividend_date:         Retrieves the most recent ex-dividend date.
-# - _annual_dividend:          Returns the total annual dividend paid per share.
-# - _current_ratio:            Calculates the current ratio (current assets / current liabilities).
-# - _quick_ratio:              Calculates the quick ratio, a measure of liquidity excluding inventory.
-# - _cash_ratio:               Calculates the cash ratio (most conservative liquidity ratio).
-# - _debt_to_equity_ratio:     Calculates the debt-to-equity ratio (total debt / total equity).
-# - _debt_to_capital_ratio:    Calculates the debt-to-capital ratio.
-# - _gross_profit_margin_ratio:Calculates the gross profit margin.
-# - _operating_profit_margin_ratio: Calculates the operating profit margin.
-# - _net_profit_margin:        Calculates the net profit margin.
-# - _ebit_margin:              Calculates the EBIT margin.
-# - _pretax_profit_margin_ratio: Calculates the pretax profit margin.
-# - _capex_ratio:              Calculates the ratio of operating cash flow to capital expenditures.
-# - _free_cash_flow_to_operating_cash_flow_ratio: Ratio of free cash flow to operating cash flow.
-# - _rd_to_revenue_ratio:      Calculates R&D expense as a percentage of revenue.
-# - _sga_to_revenue_ratio:     Calculates SG&A as a percentage of revenue.
-# - _interest_coverage_ratio:  Calculates the interest coverage ratio (EBIT / interest expense).
-# - _tax_burden:               Calculates the tax burden (net income / earnings before tax).
-# - _interest_burden:          Calculates the interest burden (EBT / EBIT).
-# - _defensive_interval_ratio: Calculates the defensive interval ratio (liquid assets / daily op expenses).
-# - _fixed_charge_coverage_ratio: Calculates the fixed charge coverage ratio.
-# - _receivables_turnover_ratio: Calculates the receivables turnover ratio.
-# - _inventory_turnover_ratio: Calculates the inventory turnover ratio.
-# - _days_sales_outstanding:   Calculates the Days Sales Outstanding (DSO).
-# - _days_inventory_on_hand:   Calculates the Days Inventory on Hand (DIOH).
-# - _payables_turnover_ratio:  Calculates the payables turnover ratio.
-# - _days_of_payables:         Calculates the days of payables outstanding.
-# - _cash_conversion_cycle:    Calculates the cash conversion cycle (CCC).
-# - _return_on_equity:         Calculates the return on equity (ROE).
-# - _working_capital_turnover: Calculates the working capital turnover ratio.
-# - _fixed_asset_turnover:     Calculates the fixed asset turnover ratio.
-# - _total_asset_turnover:     Calculates the total asset turnover ratio.
-# - _operating_return_on_assets: Calculates the operating return on assets.
-# - _return_on_assets:         Calculates the return on assets (ROA).
-# - _equity_multiplier:        Calculates the equity multiplier (financial leverage).
-# - _return_on_invested_capital_pre_tax: Calculates the pre-tax ROIC.
-# - _return_on_invested_capital_after_tax: Calculates the after-tax ROIC.
+# Extract and normalize financial accounts before calculating ratios.
 
 class Ratios:
     def __init__(self, analyze_instance):
@@ -217,7 +155,7 @@ class Ratios:
                 adjusted[date] = amount / days_in_year
         return pd.Series(adjusted)
        
-    #────────── Dividend Ratios ──────────────────────────────────────
+    # Dividend ratios.
     def _dividend_yield(self):
         try:
             summary = self.parent.dividend_report
@@ -248,7 +186,7 @@ class Ratios:
             print("Error: Annual Dividend is not a valid float.")
         return None
 
-    #────────── Ratios ──────────────────────────────────────
+    # Ratios.
     def _current_ratio(self):
         balance_sheet = self.__prepare_statement('balance_sheet')
         if balance_sheet is not None:

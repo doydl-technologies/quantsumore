@@ -52,24 +52,16 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['AroonIndicator']
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class AroonIndicator:
@@ -78,22 +70,18 @@ class AroonIndicator:
         self.df = self.parent.df
         self.period = period
 
-        # Verify sufficient data before proceeding
-        self.parent.verify_period_sufficiency(self.period)
+        self.parent.verify_period_sufficiency(self.period + 1)
 
-        # Calculate
         self._calculate_aroon()
         self._detect_trends()
         
     def _calculate_aroon(self):
         """Calculate the Aroon Up and Aroon Down indicators and store them in the DataFrame."""
-        # Calculate Aroon Up
-        self.df['Aroon_Up'] = self.df['High'].rolling(window=self.period).apply(
+        self.df['Aroon_Up'] = self.df['High'].rolling(window=self.period + 1).apply(
             lambda x: ((self.period - x[::-1].argmax()) / self.period) * 100, raw=True
         )
 
-        # Calculate Aroon Down
-        self.df['Aroon_Down'] = self.df['Low'].rolling(window=self.period).apply(
+        self.df['Aroon_Down'] = self.df['Low'].rolling(window=self.period + 1).apply(
             lambda x: ((self.period - x[::-1].argmin()) / self.period) * 100, raw=True
         )
 
@@ -133,7 +121,7 @@ class AroonIndicator:
 
         # Range Trading/Consolidation: Aroon-Up and Aroon-Down moving in parallel
         self.df['Trend_Signal'] = np.where(
-            abs(self.df['Aroon_Up'] - self.df['Aroon_Down']) <= 10, # Adjust this threshold as needed
+            abs(self.df['Aroon_Up'] - self.df['Aroon_Down']) <= 10, # Consolidation tolerance in Aroon percentage points.
             'Range Trading/Consolidation',
             self.df['Trend_Signal']
         )
@@ -149,7 +137,6 @@ class AroonIndicator:
         plt.plot(self.df['Date'], self.df['Aroon_Down'], label='Aroon Down', color='red')
         plt.axhline(50, color='gray', linestyle='--', label='50 level')
 
-        # Highlight areas of detected trend signals
         trend_signal_dates = self.df[self.df['Trend_Signal'] != 'None']['Date']
         for trend in ['Uptrend Start', 'Downtrend Start', 'Strong Uptrend', 'Strong Downtrend', 'Range Trading/Consolidation']:
             plt.scatter(self.df[self.df['Trend_Signal'] == trend]['Date'], 

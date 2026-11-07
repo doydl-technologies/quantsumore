@@ -54,12 +54,13 @@
 
 
 import re
+from math import isfinite
 from io import StringIO
+from datetime import datetime, timezone
+from urllib.parse import urlencode
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...date_parser import dtparse
-from ...exceptions import (
-    # CPIError, 
+from ....date_parser import dtparse
+from ....exceptions import (
     CPIDateParseError, 
     CPIDataUnavailableError
 )
@@ -67,12 +68,6 @@ from ...exceptions import (
 __all__ = ['CUUR0000AA0']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 current_date = dtparse.nowCT(format='%Y-%m-%d')
 
@@ -93,7 +88,7 @@ class CUUR0000AA0:
 
         def extract(self):
             if self.html_content:
-                from lxml import html as Html # Third-party library imports (from PyPI or other package sources)
+                from lxml import html as Html
                 tree = Html.fromstring(self.html_content)
                 xpath = '//*[@id="mobile-meta-col"]'
                 element = tree.xpath(xpath)
@@ -123,10 +118,19 @@ class CUUR0000AA0:
             return ['date']
 
     class Data:
-        def __init__(self, start_date='1913-01-01', current_date=current_date, end_date=None):
+        """Fetch monthly FRED observations and retain the legacy calculator columns.
+
+        current_date remains accepted for call compatibility; retrieval uses
+        published observations rather than a chart-vintage or HTML date filter.
+        """
+        def __init__(self, start_date='1913-01-01', current_date=current_date, end_date=None,
+                     series_id='CPIAUCNS'):
             self.start = start_date
             self.end = end_date
             self.current = current_date
+            if not isinstance(series_id, str) or not series_id.strip():
+                raise ValueError("A nonempty FRED series identifier is required.")
+            self.series_id = series_id.strip().upper()
             self.url = self.construct_url()
             self.period_mapping = {
                 1: 'January', 2: 'February', 3: 'March', 4: 'April',
@@ -136,77 +140,65 @@ class CUUR0000AA0:
             self.all_items = self.construct_data()
             
         def construct_url(self):
-            """
-            Constructs a URL for the FRED graph API with customizable date ranges and current date.
-            Uses formatted start_date, end_date, and current_date for the URL parameters.
-            """
-            url_template = (
-                "https://fred.stlouisfed.org/graph/fredgraph.csv?"
-                "bgcolor=%23e1e9f0&chart_type=line&drp=0&fo=open%20sans&graph_bgcolor=%23ffffff&"
-                "height=450&mode=fred&recession_bars=on&txtcolor=%23444444&ts=12&tts=12&"
-                "width=1140&nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes&"
-                "id=CPIAUCNS&scale=left&cosd={start_date}&coed={end_date}&"
-                "line_color=%234572a7&link_values=false&line_style=solid&mark_type=none&"
-                "mw=3&lw=2&ost=-99999&oet=99999&mma=0&fml=a&fq=Monthly&fam=avg&fgst=lin&"
-                "fgsnd=2020-02-01&line_index=1&transformation=lin&vintage_date={current_date}&"
-                "revision_date={current_date}&nd={start_date}"
-            ).format(start_date=self.start, end_date=self.end, current_date=self.current)
-
-            return url_template
+            """Request observations directly without chart styling or an HTML date lookup."""
+            params = {'id': self.series_id}
+            if self.start is not None:
+                params['cosd'] = self.start
+            if self.end is not None:
+                params['coed'] = self.end
+            return 'https://fred.stlouisfed.org/graph/fredgraph.csv?' + urlencode(params)
 
         def construct_data(self):
-            if self.url:
-                try:
-                    headers = {"User-Agent": "Mozilla/5.0"}
-                    
-                    import requests # Third-party library imports (from PyPI or other package sources)        
-                    resp = requests.get(self.url, headers=headers)
-                    resp.raise_for_status()
-                    
-                    import pandas as pd # Third-party library imports (from PyPI or other package sources)        
-                    df = pd.read_csv(StringIO(resp.text))  
-                    
-                    # Automatically detect the date column name instead of hardcoding it.
-                    # Rationale: FRED changed the column name from 'DATE' to 'observation_date',
-                    # which broke downstream code. To prevent similar issues in the future,
-                    # this searches for any column that includes 'date' in its name (case-insensitive).
-                    date_column = next(
-                        (col for col in df.columns if 'date' in col.lower()), 
-                        None
-                    )
-
-                    if not date_column:
-                        raise ValueError("No date-related column found in the dataset.")
-
-                    # Convert the detected date column to datetime
-                    df[date_column] = pd.to_datetime(df[date_column])
-                    df['period'] = df[date_column].dt.month.map(self.period_mapping)
-                    df['year'] = df[date_column].dt.year.astype(int)
-
-                    # Drop the original date column since we extracted year/period
-                    df = df.drop(columns=[date_column])
-
-                    # Rename CPI column and standardize structure
-                    df = df.rename(columns={'CPIAUCNS': 'value'})
-                    df['series_id'] = 'CUUR0000AA0'
-                    df = df[['series_id', 'year', 'period', 'value']]
-                    df.loc[:, 'year'] = df['year'].astype(int)
-                    df.loc[:, 'value'] = df['value'].astype(float)
-
-                    # Calculate and append annual averages
-                    average_df = df.groupby('year')['value'].mean().round(1).reset_index()
-                    average_df['series_id'] = 'CUUR0000AA0'
-                    average_df['period'] = 'Average'
-                    df = pd.concat([df, average_df], ignore_index=True)
-
-                    # Reset index to ensure clean dataframe
-                    df = df.reset_index(drop=True)
-
-                    return df
-
-                except Exception as e:
-                    return None
-            return None
+            """Fetch a live CSV with connect/read limits and preserve failure causes."""
+            import pandas as pd
+            import requests
+            try:
+                response = requests.get(
+                    self.url, timeout=(3.05, 10),
+                    headers={'User-Agent': 'quantsumore/3.0 (CPI data client)', 'Accept': 'text/csv'}
+                )
+                response.raise_for_status()
+                raw = pd.read_csv(StringIO(response.text), na_values=['.'])
+                date_column = next(
+                    (column for column in raw.columns
+                     if column.strip().lower() in ('date', 'observation_date')), None
+                )
+                if date_column is None or self.series_id not in raw.columns:
+                    raise ValueError("CPI CSV lacks its date or requested series column.")
+                dates = pd.to_datetime(raw[date_column], errors='raise')
+                values = pd.to_numeric(raw[self.series_id], errors='raise')
+                monthly = pd.DataFrame({'date': dates, 'value': values}).dropna()
+                if self.start is not None:
+                    monthly = monthly[monthly['date'] >= pd.Timestamp(self.start)]
+                if self.end is not None:
+                    monthly = monthly[monthly['date'] <= pd.Timestamp(self.end)]
+                monthly = monthly.sort_values('date')
+                if (monthly.empty or not (monthly['value'] > 0).all()
+                        or not monthly['value'].map(isfinite).all()):
+                    raise ValueError("CPI CSV contains no valid positive observations in the requested range.")
+                if monthly['date'].dt.to_period('M').duplicated().any():
+                    raise ValueError("CPI CSV contains duplicate monthly observations.")
+                latest = monthly['date'].max().strftime('%Y-%m-%d')
+                monthly['period'] = monthly['date'].dt.month.map(self.period_mapping)
+                monthly['year'] = monthly['date'].dt.year.astype(int)
+                monthly['value'] = monthly['value'].astype(float)
+                # Retain the legacy output identifier; provenance uses the actual FRED series.
+                monthly['series_id'] = 'CUUR0000AA0'
+                monthly = monthly[['series_id', 'year', 'period', 'value']]
+                annual = monthly.groupby('year')['value'].mean().round(1).reset_index()
+                annual['series_id'] = 'CUUR0000AA0'
+                annual['period'] = 'Average'
+                result = pd.concat([monthly, annual[monthly.columns]], ignore_index=True)
+                result.attrs.update(
+                    source='FRED', source_series_id=self.series_id, source_url=self.url,
+                    fetched_at=datetime.now(timezone.utc).isoformat(), latest_observation=latest,
+                    annual_average='Mean of available monthly observations, rounded to one decimal.'
+                )
+                return result
+            except (requests.RequestException, ValueError, KeyError, TypeError, OverflowError) as error:
+                raise CPIDataUnavailableError(
+                    f"Unable to retrieve live CPI series {self.series_id}: {error}"
+                ) from error
 
         def all_items_index(self):
             """Returns pandas DataFrame with CPI data or raises if unavailable."""

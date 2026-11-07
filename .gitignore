@@ -5,3 +5,16 @@ __pycache__/
 .venv/
 build/
 dist/
+
+.release-check/
+.coverage
+Home.lnk
+
+/docs/verification/
+/.releases/
+/release-notes/
+/RELEASE_NOTES_TEMPLATE.md
+/docs/RELEASE.md
+/docs/VERIFICATION.md
+/tools/verify_release.py
+/.local/

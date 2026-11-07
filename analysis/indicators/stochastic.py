@@ -52,23 +52,15 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['FastStochasticOscillator']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class FastStochasticOscillator:
@@ -78,11 +70,9 @@ class FastStochasticOscillator:
         self.k_period = k_period
         self.d_period = d_period
 
-        # Verify sufficient data before proceeding
-        max_period = max(self.k_period, self.d_period)
+        max_period = self.k_period + self.d_period - 1
         self.parent.verify_period_sufficiency(max_period)
 
-        # Calculate indicators and signals
         self._calculate_stochastic()
         self._detect_overbought_oversold()
         self._detect_crosses()
@@ -90,15 +80,14 @@ class FastStochasticOscillator:
 
     def _calculate_stochastic(self):
         """Calculate the %K and %D lines of the Stochastic Oscillator."""
-        # Calculate the Lowest Low and Highest High over the K period
         self.df['Lowest_Low'] = self.df['Low'].rolling(window=self.k_period).min()
         self.df['Highest_High'] = self.df['High'].rolling(window=self.k_period).max()
 
-        # Calculate the %K line
-        self.df['%K'] = 100 * ((self.df['Close'] - self.df['Lowest_Low']) / (self.df['Highest_High'] - self.df['Lowest_Low']))
+        span = self.df['Highest_High'] - self.df['Lowest_Low']
+        self.df['%K'] = (100 * (self.df['Close'] - self.df['Lowest_Low']) / span).where(span != 0, 0)
 
-        # Calculate the %D line as a 3-period moving average of %K
         self.df['%D'] = self.df['%K'].rolling(window=self.d_period).mean()
+        self.df['%K'] = self.df['%K'].where(self.df['%D'].notna())
 
     def _detect_overbought_oversold(self):
         """Detect overbought and oversold conditions."""
@@ -130,7 +119,7 @@ class FastStochasticOscillator:
         self.df['Stoch_Trend'] = np.where(self.df['%K'] > self.df['%K'].shift(1), 'up',
                                           np.where(self.df['%K'] < self.df['%K'].shift(1), 'down', 'flat'))
 
-        # Divergence occurs when price and Stochastic trends differ
+        # Label opposite one-period price and stochastic changes as heuristic divergence.
         self.df['Divergence'] = np.where((self.df['Price_Trend'] == 'up') & (self.df['Stoch_Trend'] == 'down'), 'Bearish Divergence',
                                          np.where((self.df['Price_Trend'] == 'down') & (self.df['Stoch_Trend'] == 'up'), 'Bullish Divergence', 'None'))
 
@@ -142,27 +131,22 @@ class FastStochasticOscillator:
         """Plot the Stochastic Oscillator %K and %D lines, highlighting overbought/oversold conditions, crosses, and divergence."""
         plt.figure(figsize=(14, 8))
 
-        # Plot %K and %D lines
         plt.plot(self.df['Date'], self.df['%K'], label='%K Line', color='blue')
         plt.plot(self.df['Date'], self.df['%D'], label='%D Line', color='red')
 
-        # Add overbought and oversold lines
         plt.axhline(80, color='red', linestyle='--', label='Overbought (80)')
         plt.axhline(20, color='green', linestyle='--', label='Oversold (20)')
 
-        # Highlight overbought and oversold signals
         plt.scatter(self.df[self.df['Overbought'] == 'Overbought']['Date'],
                     self.df[self.df['Overbought'] == 'Overbought']['%K'], color='red', label='Overbought Signal', marker='v')
         plt.scatter(self.df[self.df['Oversold'] == 'Oversold']['Date'],
                     self.df[self.df['Oversold'] == 'Oversold']['%K'], color='green', label='Oversold Signal', marker='^')
 
-        # Highlight cross signals
         plt.scatter(self.df[self.df['Cross'] == 'Bullish Cross']['Date'],
                     self.df[self.df['Cross'] == 'Bullish Cross']['%K'], color='green', label='Bullish Cross', marker='o')
         plt.scatter(self.df[self.df['Cross'] == 'Bearish Cross']['Date'],
                     self.df[self.df['Cross'] == 'Bearish Cross']['%K'], color='red', label='Bearish Cross', marker='o')
 
-        # Highlight divergence points
         for div_type in ['Bearish Divergence', 'Bullish Divergence']:
             plt.scatter(self.df[self.df['Divergence'] == div_type]['Date'],
                         self.df[self.df['Divergence'] == div_type]['%K'], label=div_type, marker='x', alpha=0.7)

@@ -52,11 +52,9 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # TreasuryPipelineError,
+from ....date_parser import dtparse
+from ....proxy import Proxy
+from ....exceptions import (
     TreasuryDataValidationError,
     TreasuryNoDataError,
     TreasuryDataUnavailableError,
@@ -67,15 +65,9 @@ __all__ = ['riskfreerate']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 """

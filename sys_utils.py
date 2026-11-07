@@ -66,9 +66,7 @@ __all__ = ['Device', 'Download', 'FileInspector', 'Package']
 
 
 
-######################################################################
-# SYSTEM DIRECTORY FIND
-######################################################################
+# Platform application-data directories.
 """
 Locate and manage the current system's application data directories.
 
@@ -85,7 +83,6 @@ Locate and manage the current system's application data directories.
     • Config data:  $XDG_CONFIG_HOME or ~/.config
     • Common data:  /usr/local/share
 """
-# --- helper descriptor ---
 class classproperty:
     def __init__(self, func): self.func = func
     def __get__(self, instance, owner): return self.func(owner)
@@ -159,11 +156,9 @@ class Device:
         return data_dir
 
 
-######################################################################
-# FILE INSPECTION
-######################################################################
+# File timestamps and scheduled-update checks.
 _USE_CREATION_DATE = True # When True, use the file’s creation timestamp; otherwise use its modified timestamp.
-_DEFAULT_DATE_FIELD = "created" if _USE_CREATION_DATE else "modified" # Derive the default field name from the boolean
+_DEFAULT_DATE_FIELD = "created" if _USE_CREATION_DATE else "modified"
 
 @dataclass
 class FileInfo:
@@ -171,14 +166,8 @@ class FileInfo:
     checked_time: Optional[datetime]; age: Optional[timedelta]
     is_older_than: Optional[bool]=None; is_younger_than: Optional[bool]=None
 
-# Notes:
-# -----
-# Regarding the inspect method, Inspect one or more files under self.base_path.
-# 
-# - date_field: "created" (birth/ctime) or "modified" (mtime).
-# - threshold_n + threshold_unit: compare file age to a timedelta.
-# - threshold_dt: compare chosen timestamp to an absolute datetime.
-# - include_shortcuts: how to handle " - Shortcut.lnk" files.
+# Inspect file timestamps relative to an age or absolute-date threshold.
+# Shortcuts may be included, and either creation or modification times can be compared.
 class FileInspector:
     def __init__(self, base_path: Union[str, Path]):
         self.base_path = Path(base_path)
@@ -231,9 +220,7 @@ class FileInspector:
         return last         
 
 
-######################################################################
-# Data‐Package & Messages
-######################################################################
+# Download configuration and status messages.
 @dataclass
 class Package:
     id: str; filename: str; url: str; schedule_hour: int = 0; schedule_minute: int = 0
@@ -251,9 +238,7 @@ class ErrorMessage(DownloaderMessage):
     def __init__(self, pkg: Package, message: str): self.package = pkg; self.message = message
 
 
-######################################################################
-# Downloader
-######################################################################
+# Scheduled downloads.
 """
 Manages a collection of Package entries and only downloads
 those whose local copy is missing or stale (per schedule).

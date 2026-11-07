@@ -55,61 +55,22 @@
 
 
 import re
-# import json
-# from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..markup import url_encode_decode
-# # from .date_parser import dtparse
+from .markup import url_encode_decode
 
 __all__ = [
     'IterDict',
-    # 'dictEngine',
     ]      
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 
-# Notes:
-# -----
-# IterDict is integral to quantsumore’s handling of JSON responses, designed to work seamlessly with 
-# the structures returned from financial data APIs. It makes it straightforward to filter, extract, 
-# and transform data into actionable formats by focusing on the details that matter while eliminating 
-# extraneous information.
-#     
-# - IterDict methods work on copies of the original JSON structure to ensure that operations do not modify 
-#   the raw API responses directly.
-# - The class is designed specifically for the nested JSON formats commonly encountered in our financial 
-#   data APIs, enabling targeted manipulations to suit quantsumore’s needs.
+# Transform copies rather than mutating the raw provider response.
 class IterDict:
-    """
-    IterDict provides specialized utilities for navigating, filtering, and transforming nested JSON 
-    structures commonly returned from financial data APIs integrated into quantsumore. 
+    """Search, filter and normalize nested provider response structures.
 
-    Within quantsumore, API responses often contain complex and deeply nested data formats, with 
-    dictionaries, lists, tuples, and sets holding diverse financial information. IterDict is designed 
-    to streamline the handling of these structures by allowing you to:
-    
-    - Prune irrelevant keys or entire sub-dictionaries from the JSON data, specifically targeting 
-      metadata or unnecessary fields that can clutter financial metrics.
-    - Extract key financial metrics and URLs directly, identifying and isolating relevant data 
-      points—like pricing, volume, or performance indicators—within nested structures.
-    - Identify and remove empty segments that arise after filtering, ensuring the resulting data is 
-      concise and free of superfluous elements.
-    - Search for and retrieve specific keys or values, like "ticker," "exchange," or URLs, 
-      at any level of nesting, to quickly pinpoint the metrics needed for analysis.
-
-    Each method is optimized for quantsumore’s use cases, allowing efficient data manipulation 
-    without affecting the integrity of the JSON structure returned by the APIs. The static methods 
-    in IterDict enable quick, recursive operations on the JSON structures, making it easier to 
-    focus on meaningful financial data while eliminating distractions.
-    """
+The helpers handle nested dictionaries and collections, locate keys and
+responses, and remove empty or irrelevant entries."""
     @staticmethod
     def _is_effectively_empty(item):
         """
@@ -138,36 +99,12 @@ class IterDict:
     
     @staticmethod    
     def top_key(d, top_1=True, exclusion=None, exclusion_sensitive=False):
-        """
-        Extracts the top-level keys from a dictionary or a list of dictionaries, optionally excluding a specified key.
+        """Return keys from a dictionary or the first dictionary in a list.
 
-        This function processes an input `d` that must either be a dictionary or a list containing dictionaries.
-        It extracts the keys from the first dictionary encountered. If the input is a dictionary, it extracts keys from it
-        directly. If it is a list of dictionaries, it extracts keys from the first dictionary in the list. The function can
-        optionally return only the first key from the extracted keys. Additionally, it can exclude a specified key from the
-        results, with an option to make this exclusion case-sensitive.
-
-        Parameters:
-        ----------
-        d : dict or list
-            The input dictionary or list of dictionaries to inspect.
-        top_1 : bool, optional
-            If True, return only the first key. Otherwise, return all keys. Default is True.
-        exclusion : str, optional
-            A key to exclude from the results. If None, no key is excluded.
-        exclusion_sensitive : bool, optional
-            If True, exclusion is case-sensitive. Default is False.
-
-        Returns:
-        -------
-        str or list
-            The first key as a string (if `top_1` is True), or a list of keys.
-            Returns: "Invalid or unsupported structure" if input is invalid.
-
-        Raises:
-        ------
-        TypeError
-            If the input is neither a dictionary nor a list of dictionaries.
+        top_1 selects the first remaining key; otherwise return the key list.
+        exclusion removes a matching key, case-insensitively unless
+        exclusion_sensitive is True. Empty key results return an empty list.
+        Unsupported inputs return the string "Invalid or unsupported structure".
         """
         keys = []
         if isinstance(d, dict):
@@ -189,7 +126,7 @@ class IterDict:
     @staticmethod    
     def search_keys(d, target_keys, value_only=True, first_only=True, return_all=False, include_key_in_results=False):
         """
-        Searches for multiple target keys within a nested structure and Returns: results for each key.
+        Search nested data for multiple keys and return the matching results.
 
         Parameters:
         ----------
@@ -287,8 +224,7 @@ class IterDict:
     @staticmethod    
     def search_keys_in(d, target_keys, value_only=True, first_only=True, return_all=False):
         """
-        Recursively searches for keys in a nested structure (dict, list, tuple, set)
-        and Returns: their corresponding values, the key-value pairs, or the entire sub-structure,
+        Recursively search nested structures and return matching values, the key-value pairs, or the entire sub-structure,
         optionally returning all matches instead of just the first.
 
         Parameters:
@@ -458,7 +394,6 @@ class IterDict:
                         return result
             return matches if not first_only else None
 
-        # If a key_path is provided, navigate through it
         if key_path:
             current_data = d
             try:
@@ -478,13 +413,12 @@ class IterDict:
 
     @staticmethod         
     def isNested(d):
-        """
-        Ensures that a given dictionary is nested within a list.
+        """Ensures that a given dictionary is nested within a list.
 
         If the input data is not already a list, it encloses the data in a new list.
         If the input is a list and contains any items that are not dictionaries,
         it nests the entire list within another list to ensure uniformity.
-        If all items in the list are dictionaries, it Returns: the list unchanged.
+        If all items in the list are dictionaries, it returns the list unchanged.
 
         Parameters:
         ----------
@@ -495,7 +429,7 @@ class IterDict:
         -------
         list
             The data wrapped in a list if needed, or unchanged if already a uniform list of dicts.
-        """       
+        """
         if not isinstance(d, list):
             return [d]
         else:
@@ -605,10 +539,7 @@ class IterDict:
         recurse(data, key_check)
         return entries       
     
-    # Notes:
-    # -----
-    # - If an entry does not conform to the expected structure, it is skipped.
-    # - No explicit error is raised for malformed data.
+    # Skip malformed response entries without raising an error.
     @staticmethod 
     def clean_initial_content(d):
         """

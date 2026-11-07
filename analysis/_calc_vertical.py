@@ -54,7 +54,6 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from ..strata_utils import IterDict
 
 
@@ -62,12 +61,6 @@ __all__ = ['Vertical_Analysis']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 class Vertical_Analysis:
     def __init__(self, analyze_instance): self.parent = analyze_instance
@@ -85,7 +78,7 @@ class Vertical_Analysis:
                 statement.replace(['--',''], pd.NA, inplace=True)
                 statement = statement.apply(pd.to_numeric, errors='coerce')
                 vertical = statement.div(statement.loc['Total Revenue'])
-                v_fmt = vertical.applymap(lambda x: f"{x:.2%}" if pd.notna(x) else '')
+                v_fmt = vertical.map(lambda x: f"{x:.2%}" if pd.notna(x) else '')
                 v_fmt = v_fmt.where(~self.parent.income_statement.isin(['--','']), self.parent.income_statement)
                 return v_fmt
         if financial_statement == 'Balance Sheet':
@@ -94,7 +87,7 @@ class Vertical_Analysis:
                 statement.replace(['--',''], pd.NA, inplace=True)
                 statement = statement.apply(pd.to_numeric, errors='coerce')
                 vertical = statement.div(statement.loc['Total Assets'])
-                v_fmt = vertical.applymap(lambda x: f"{x:.2%}" if pd.notna(x) else '')
+                v_fmt = vertical.map(lambda x: f"{x:.2%}" if pd.notna(x) else '')
                 v_fmt = v_fmt.where(~self.parent.balance_sheet.isin(['--','']), self.parent.balance_sheet)
                 return v_fmt
         if financial_statement == 'Cash Flow Statement':
@@ -103,7 +96,7 @@ class Vertical_Analysis:
                 statement.replace(['--',''], pd.NA, inplace=True)
                 statement = statement.apply(pd.to_numeric, errors='coerce')
                 vertical = statement.div(statement.loc['Net Cash Flow-Operating'])
-                v_fmt = vertical.applymap(lambda x: f"{x:.2%}" if pd.notna(x) else '')
+                v_fmt = vertical.map(lambda x: f"{x:.2%}" if pd.notna(x) else '')
                 v_fmt = v_fmt.where(~self.parent.cash_flow_statement.isin(['--','']), self.parent.cash_flow_statement)
                 return v_fmt
                

@@ -52,24 +52,16 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['OnBalanceVolume']
 
 
      
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class OnBalanceVolume:
@@ -77,33 +69,31 @@ class OnBalanceVolume:
         self.parent = parent
         self.df = self.parent.df
 
-        # Calculate indicators and signals
         self._calculate_obv()
 
     def _calculate_obv(self):
         """Calculate the On-Balance Volume (OBV) and store it in the DataFrame."""
         self.df['OBV'] = 0
         
-        # Calculate OBV
-        self.df['OBV'] = self.df['Volume'].where(self.df['Close'] > self.df['Close'].shift(1), -self.df['Volume'])
-        self.df['OBV'] = self.df['OBV'].fillna(0).cumsum()
+        change = np.sign(self.df['Close'].diff()).fillna(0)
+        self.df['OBV'] = (change * self.df['Volume']).cumsum() + self.df['Volume'].iloc[0]
 
     def get_obv(self):
         """Return the DataFrame with the OBV column."""
         return self.df[['Date', 'Close', 'Volume', 'OBV']]
 
     def detect_divergence(self):
-        """
-        Detect divergence between OBV and price.
-        
-        :return: DataFrame with detected divergence points.
+        """Return rows labeled by opposite one-period price and OBV changes.
+
+        These divergence labels are legacy heuristics, not independently verified
+        predictions of price direction.
         """
         self.df['Price_Trend'] = np.where(self.df['Close'] > self.df['Close'].shift(1), 'up', 
                                           np.where(self.df['Close'] < self.df['Close'].shift(1), 'down', 'flat'))
         self.df['OBV_Trend'] = np.where(self.df['OBV'] > self.df['OBV'].shift(1), 'up', 
                                         np.where(self.df['OBV'] < self.df['OBV'].shift(1), 'down', 'flat'))
         
-        # Divergence occurs when price and OBV trends differ
+        # Label opposite one-period price and OBV changes as divergence.
         self.df['Divergence'] = np.where((self.df['Price_Trend'] == 'up') & (self.df['OBV_Trend'] == 'down'), 'bearish',
                                          np.where((self.df['Price_Trend'] == 'down') & (self.df['OBV_Trend'] == 'up'), 'bullish', 'none'))
         
@@ -127,7 +117,6 @@ class OnBalanceVolume:
         ax2.plot(self.df['Date'], self.df['OBV'], color='tab:orange', label='OBV')
         ax2.tick_params(axis='y', labelcolor='tab:orange')
 
-        # Highlight divergence points
         divergence_points = self.df[self.df['Divergence'] != 'none']
         ax1.scatter(divergence_points['Date'], divergence_points['Close'], color='red', label='Divergence', zorder=5)
 

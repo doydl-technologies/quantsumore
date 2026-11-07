@@ -57,14 +57,18 @@
 import json
 import os
 from pathlib import Path
+from shutil import copyfile
+from tempfile import NamedTemporaryFile
 import re
 import csv
 from io import StringIO
 import sqlite3
 import unicodedata
 from datetime import datetime, time, timezone
+from copy import deepcopy
+from functools import wraps
+from threading import RLock
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from quantsumore import APP_DATA_DIR
 from ..sys_utils import Download, Package, FileInspector
 from ._filebase import JSON, SQLiteDBHandler
@@ -82,23 +86,15 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# -- Configure local data directory --
-appdata_local_dir = str(APP_DATA_DIR) # Get the local directory for storing data files, using Device.quantsumore_default if set
+appdata_local_dir = str(APP_DATA_DIR)
 
-# -- Define file names, paths, and URLs --
 # Stock tickers: file and URL
 _STOCK_TICKERS_FILE_PATH = os.path.join(appdata_local_dir, 'stock_tickers.txt')
 _STOCK_TICKERS_URL = (
     f"https://raw.githubusercontent.com/"
-    f"cedricmoorejr/quantsumore/"
-    f"v{__version__}/"
+    f"doydl-technologies/quantsumore/"
+    f"main/"
     f"files/stock_tickers.txt"
 )
 # Crypto config: file, DB, and URL
@@ -106,37 +102,61 @@ _CRYPTO_CONFIG_FILE_PATH = os.path.join(appdata_local_dir, 'all_data.json')
 _CRYPTO_DATABASE_FILE = 'crypto.db'
 _CRYPTO_CONFIG_URL = (
     f"https://raw.githubusercontent.com/"
-    f"cedricmoorejr/quantsumore/"
-    f"refs/heads/v{__version__}/"
+    f"doydl-technologies/quantsumore/"
+    f"main/"
     f"files/crypto/all_data.json"
 )
 
-# -- Define the packages to be managed by the downloader --
 packages = [
     Package(
         id="stocks",
         filename='stock_tickers.txt',
         url=(_STOCK_TICKERS_URL),
-        schedule_hour=0,   # Github cron runs at midnight (12:00 AM), every Monday–Friday
+        schedule_hour=0,
     ),
     Package(
         id="crypto",
         filename='all_data.json',
         url=(_CRYPTO_CONFIG_URL),
-        schedule_hour=1,   # Github cron runs at 1:00 AM, every Monday–Friday
+        schedule_hour=1,
     ),
 ]
 
-# -- Download or refresh packages as needed --
-dl = Download(packages) # Create a Download manager instance with the packages
-dl.update(quiet=True, replace=True) # Attempt to download or refresh packages if stale/missing
+def _seed_reference_file(destination, bundled):
+    """Publish a complete bundled snapshot without replacing an existing file."""
+    if destination.exists():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(dir=destination.parent, prefix=f".{destination.name}.",
+                            suffix=".tmp", delete=False) as staged:
+        temporary = Path(staged.name)
+    try:
+        copyfile(bundled, temporary)
+        try:
+            # Windows rename refuses an existing target; POSIX rename replaces it.
+            if os.name == "nt":
+                os.rename(temporary, destination)
+            else:
+                os.link(temporary, destination)
+        except FileExistsError:
+            pass
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+for destination, bundled in [
+    (Path(_STOCK_TICKERS_FILE_PATH), Path(__file__).resolve().parents[1] / 'files/stock_tickers.txt'),
+    (Path(_CRYPTO_CONFIG_FILE_PATH), Path(__file__).resolve().parents[1] / 'files/crypto/all_data.json'),
+]:
+    _seed_reference_file(destination, bundled)
+
+dl = Download(packages, download_dir=Path(appdata_local_dir))
 
 
 
 
-######################################################################
-# EQUITY
-######################################################################
+
+# Equity lookups.
 class equityquery:
     _registry = {}
 
@@ -169,7 +189,6 @@ class equityquery:
         """Search for a symbol in a case-insensitive manner."""
         if not cls.initial_symbol_check(symbol):
             return False
-        # Normalize the search symbol to lowercase (or uppercase)
         search_symbol_lower = symbol.lower()
         return any(stock.symbol.lower() == search_symbol_lower for stock in cls._registry.values())
 
@@ -178,7 +197,6 @@ class equityquery:
         """Search for a symbol specifically in yahoo_mapping in a case-insensitive manner."""
         if not cls.initial_symbol_check(symbol):
             return False
-        # Normalize the search symbol to lowercase (or uppercase)
         search_symbol_lower = symbol.lower()
         return any(stock.yahoo_mapping.lower() == search_symbol_lower for stock in cls._registry.values())
 
@@ -187,7 +205,6 @@ class equityquery:
         """Search for a symbol specifically in nasdaq_mapping in a case-insensitive manner."""
         if not cls.initial_symbol_check(symbol):
             return False
-        # Normalize the search symbol to lowercase (or uppercase)
         search_symbol_lower = symbol.lower()
         return any(stock.nasdaq_mapping.lower() == search_symbol_lower for stock in cls._registry.values())
     
@@ -217,310 +234,168 @@ class equityquery:
             if row:
                 cls(*row)
 
-# Load the data
 equityquery.load_data(file_path=_STOCK_TICKERS_FILE_PATH)
 
 
 
 
-######################################################################
-# CRYPTOCURRENCY
-######################################################################
+# Cryptocurrency metadata.
+def _crypto_locked(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return locked
+
+
 class CryptoConfig:
+    """Refresh metadata atomically and expose isolated, coherent snapshots.
+
+    SQLite serializes writers across instances/processes. Each read uses one
+    database transaction. An instance lock protects staged input and publication
+    of its cache. Use snapshot() to read all three collections from one generation;
+    separate property accesses may span a refresh. Returned data is copied.
     """
-    Manages end-to-end synchronization and access of cryptocurrency metadata between
-    a local JSON configuration file and a persistent SQLite database, with in-memory caching
-    for high-performance reads.
 
-    Purpose:
-    -----------
-        The `CryptoConfig` class orchestrates the loading, validation, and refreshing
-        of crypto asset, exchange, and fiat pair data. It ensures your application always
-        works with the freshest available data, while minimizing unnecessary rebuilds.
-
-    Workflows:
-    -----------
-        - Full refresh:   Load new JSON data, rebuild the SQLite database, and repopulate all in-memory lists.
-        - Resume:         Read all data directly from the existing database, skipping JSON parsing if DB is fresh.
-
-    Attributes:
-    -----------
-        file_path        : Path to the local JSON configuration file (e.g., all_data.json).
-        db_filename      : Filename for the SQLite database (e.g., crypto.db).
-        db_directory     : Directory for the SQLite database (optional).
-        saved_json_content : Cached JSON content after reading from file.
-        cryptos          : In-memory list of crypto asset dictionaries.
-        exchanges        : In-memory list of exchange dictionaries.
-        pairs            : In-memory list of fiat pair dictionaries.
-
-    Methods:
-    -----------
-        to_json()
-            Load JSON data from file into `saved_json_content`.
-
-        to_sqlite()
-            Write loaded JSON data into the SQLite database, resetting it if needed.
-
-        parse_db()
-            Load all tables (cryptos, exchanges, pairs) from SQLite into memory.
-
-        run()
-            Full pipeline: Load JSON → Write SQLite → Read from DB into memory.
-
-        run_from_db()
-            Populate all in-memory lists directly from SQLite, skipping JSON.
-
-        auto_run(application_data_directory, threshold_minutes=3, update_hour=1, verbose=False)
-            Automatically determines whether to refresh from JSON or simply load from DB,
-            based on file timestamps and freshness threshold. Prints detailed step-by-step
-            status when `verbose=True`.
-
-    Notes:
-    -----------
-        - Designed to guarantee atomic DB updates and safe concurrent reads.
-        - All in-memory lists are always kept in sync with the DB after any operation.
-    """
-    def __init__(self, config_file_path = _CRYPTO_CONFIG_FILE_PATH, db_filename = _CRYPTO_DATABASE_FILE, db_directory = None):
-        """
-        Initialize a new CryptoConfig object for synchronizing cryptocurrency metadata.
-
-        Parameters:
-        -----------
-        config_file_path : str or Path, optional
-            Path to the local JSON configuration file containing cryptocurrency, exchange,
-            and fiat pair data. Defaults to `_CRYPTO_CONFIG_FILE_PATH`.
-
-        db_filename : str, optional
-            Name of the SQLite database file for storing parsed data.
-            Defaults to `_CRYPTO_DATABASE_FILE`.
-
-        db_directory : str or Path, optional
-            Directory in which the SQLite database file should be stored.
-            If None, uses the handler's default directory.
-
-        Attributes Initialized
-        -----------
-        file_path : Path
-            Absolute path to the JSON configuration file.
-
-        db_filename : str
-            Filename for the SQLite database.
-
-        db_directory : Path or None
-            Directory for the SQLite database file.
-
-        saved_json_content : dict
-            Cached content of the loaded JSON file.
-
-        cryptos : list
-            In-memory list for crypto asset dictionaries.
-
-        exchanges : list
-            In-memory list for exchange dictionaries.
-
-        pairs : list
-            In-memory list for fiat pair dictionaries.
-
-        Notes
-        -----------
-        - All attributes are instance-level and can be modified after initialization if needed.
-        - The class does not load or process data during initialization; use `run`, `run_from_db`, or `auto_run` to load data.
-        """    	
+    def __init__(self, config_file_path=_CRYPTO_CONFIG_FILE_PATH,
+                 db_filename=_CRYPTO_DATABASE_FILE, db_directory=None):
         self.file_path = Path(config_file_path)
         self.db_filename = db_filename
         self.db_directory = Path(db_directory) if db_directory is not None else None
+        self._lock = RLock()
+        self._saved_json_content = {}
+        self._snapshot = {"cryptos": [], "exchanges": [], "pairs": []}
 
-        self.saved_json_content: dict = {}
-        self.cryptos:   list[dict] = []
-        self.exchanges: list[dict] = []
-        self.pairs:     list[dict] = []
-        
+    @property
+    @_crypto_locked
+    def saved_json_content(self):
+        """Return an isolated copy of the staged input, not committed metadata."""
+        return deepcopy(self._saved_json_content)
+
+    @saved_json_content.setter
+    @_crypto_locked
+    def saved_json_content(self, value):
+        self._saved_json_content = deepcopy(value)
+
+    @property
+    def cryptos(self):
+        return self.snapshot()["cryptos"]
+
+    @property
+    def exchanges(self):
+        return self.snapshot()["exchanges"]
+
+    @property
+    def pairs(self):
+        return self.snapshot()["pairs"]
+
+    @_crypto_locked
     def to_json(self):
-        """
-        Load JSON data from the local configuration file into memory.
+        """Stage JSON input without changing the committed database or cache."""
+        with self.file_path.open("r", encoding="utf-8") as source:
+            self._saved_json_content = json.load(source)
 
-        Parameters:
-        -----------
-        None
-
-        Returns
-        -----------
-        None
-            The parsed JSON content is stored in the `saved_json_content` attribute.
-
-        Raises
-        -----------
-        FileNotFoundError
-            If the specified JSON file does not exist at `file_path`.
-        json.JSONDecodeError
-            If the file content is not valid JSON.
-        OSError
-            For other I/O errors during file access.
-
-        Notes
-        -----------
-        This method overwrites any existing value in `saved_json_content` with the newly loaded data.
-        """
-        with self.file_path.open("r", encoding="utf-8") as f:
-            self.saved_json_content = json.load(f)
-
+    @_crypto_locked
     def to_sqlite(self):
+        """Replace all tables in one transaction and reload the committed cache.
+
+        Validation and database errors propagate. Failed writes preserve the
+        previous database and cache; staged input remains available for correction.
         """
-        Write the currently loaded JSON data into the SQLite database, resetting the database first.
-
-        Parameters:
-        -----------
-        None
-
-        Returns
-        -----------
-        None
-            Updates the database on disk. Does not return any value.
-
-        Raises
-        -----------
-        RuntimeError
-            If `saved_json_content` is empty or not yet loaded.
-        sqlite3.DatabaseError
-            For any database errors during the reset or write process.
-        OSError
-            For file system errors during database file operations.
-
-        Notes
-        -----------
-        - This method removes any existing SQLite database before creating a fresh one using the current JSON data.
-        - Both `db_filename` and `db_directory` are passed to the database handler for precise file location control.
-        - Intended to be called after `to_json()` to ensure the latest data is written.
-        """
-        sqliteDB = SQLiteDBHandler(
-            filename=self.db_filename,
-            directory=self.db_directory,
-            json_data=self.saved_json_content
-        )
-        sqliteDB.reset_database()
-        sqliteDB.save()
-        
-    def parse_db(self):
-        """
-        Load all data tables from the SQLite database into in-memory Python lists.
-
-        Parameters:
-        -----------
-        None
-
-        Returns
-        -----------
-        None
-            Populates the `cryptos`, `exchanges`, and `pairs` attributes with fresh data from the database.
-
-        Raises
-        -----------
-        RuntimeError
-            If the database file does not exist or is inaccessible.
-        sqlite3.DatabaseError
-            For errors encountered while querying the database.
-
-        Notes
-        -----------
-        - This method queries the 'cryptos', 'exchanges', and 'pairs' tables in the configured SQLite database.
-        - Results are returned as lists of dictionaries, with column names as keys.
-        - Intended to be called after the database has been created or refreshed to synchronize all in-memory views.
-        - If the database is missing, the method will raise immediately without modifying in-memory data.
-        """
+        if not self._saved_json_content:
+            raise RuntimeError("Load metadata before writing the database.")
         handler = SQLiteDBHandler(
-            filename=self.db_filename,
-            directory=self.db_directory
+            filename=self.db_filename, directory=self.db_directory,
+            json_data=deepcopy(self._saved_json_content)
         )
+        handler.save(replace=True)
+        self.parse_db()
+
+    @_crypto_locked
+    def parse_db(self):
+        """Publish all collections together after a successful snapshot read."""
+        handler = SQLiteDBHandler(filename=self.db_filename, directory=self.db_directory)
         if not handler.file_exists():
             raise RuntimeError(f"{handler.db_path} not found – run the full pipeline first.")
-
+        snapshot = {}
+        queries = (
+            ("cryptos", "id, name, symbol, slug, is_active, status, rank", "rank"),
+            ("exchanges", "exchangeId, exchangeName, exchangeSlug", "exchangeName"),
+            ("pairs", "currencyId, currencySymbol, currency", "currency"),
+        )
         with handler:
-            # Cryptos
-            handler.cursor.execute("""
-                SELECT id, name, symbol, slug, is_active, status, rank
-                FROM cryptos
-                ORDER BY rank
-            """)
-            rows = handler.cursor.fetchall()
-            keys = ["id", "name", "symbol", "slug", "is_active", "status", "rank"]
-            self.cryptos = [dict(zip(keys, row)) for row in rows]
+            # Explicit BEGIN pins one generation across all three SELECTs.
+            handler.cursor.execute("BEGIN")
+            try:
+                handler.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = {row[0] for row in handler.cursor.fetchall()}
+                if not tables:
+                    snapshot = {"cryptos": [], "exchanges": [], "pairs": []}
+                for table, columns, order in queries if tables else ():
+                    handler.cursor.execute(f"SELECT {columns} FROM {table} ORDER BY {order}")
+                    keys = [column.strip() for column in columns.split(",")]
+                    snapshot[table] = [dict(zip(keys, row)) for row in handler.cursor.fetchall()]
+                handler.conn.commit()
+            except Exception:
+                handler.conn.rollback()
+                raise
+        self._snapshot = snapshot
 
-            # Exchanges
-            handler.cursor.execute("""
-                SELECT exchangeId, exchangeName, exchangeSlug
-                FROM exchanges
-                ORDER BY exchangeName
-            """)
-            rows = handler.cursor.fetchall()
-            keys = ["exchangeId", "exchangeName", "exchangeSlug"]
-            self.exchanges = [dict(zip(keys, row)) for row in rows]
+    @_crypto_locked
+    def snapshot(self):
+        """Return one copied generation, reloading commits by other instances.
 
-            # Pairs
-            handler.cursor.execute("""
-                SELECT currencyId, currencySymbol, currency
-                FROM pairs
-                ORDER BY currency
-            """)
-            rows = handler.cursor.fetchall()
-            keys = ["currencyId", "currencySymbol", "currency"]
-            self.pairs = [dict(zip(keys, row)) for row in rows]
-            
+        Before first initialization a missing database yields empty collections.
+        During first-time initialization readers see empty collections until
+        the initial transaction commits. No partial snapshot is published.
+        """
+        handler = SQLiteDBHandler(filename=self.db_filename, directory=self.db_directory)
+        if handler.file_exists():
+            self.parse_db()
+        return deepcopy(self._snapshot)
+
+    @_crypto_locked
     def auto_run(self, application_data_directory, threshold_minutes=3, update_hour=1, verbose=False):
-        """
-        Automatically refreshes or loads cryptocurrency metadata by comparing the
-        database creation time and the JSON configuration file's last update time.
+        """Reload or rebuild metadata according to the stored timestamps.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         application_data_directory : str or Path
-            Directory where both the SQLite database and JSON config file are located.
+            Database directory and directory inspected for the JSON filename.
+            The JSON read itself uses file_path.
+        threshold_minutes : int, default 3
+            Maximum absolute timestamp difference accepted by within_delta().
+            If the JSON file's creation time and the stored database timestamp
+            fall within this tolerance, reload without rebuilding.
+        update_hour : int, default 1
+            Scheduled hour passed to the file inspector's update-threshold calculation.
+        verbose : bool, default False
+            Print the selected refresh path and timestamp details.
 
-        threshold_minutes : int, optional
-            Maximum age difference (in minutes) to consider the database "fresh".
-            If the database was created within this window of the JSON file's
-            last update, no rebuild will occur. Defaults to 3.
-
-        update_hour : int, optional
-            The scheduled hour when the JSON file is expected to be refreshed (e.g., 1 for 1AM).
-            Used to compute the expected update threshold. Defaults to 1.
-
-        verbose : bool, optional
-            If True, prints step-by-step status messages describing the refresh logic.
-
-        Returns
-        -----------
-        None
-            Populates all in-memory lists (`cryptos`, `exchanges`, `pairs`) based on
-            either a fresh DB build or a fast reload from SQLite.
-
-        Notes
-        -----------
-        - If the database does not exist, the method always creates it from the JSON file.
-        - If both files exist, but the database is older than the JSON file (by more than `threshold_minutes`), the database is rebuilt.
-        - If the database is sufficiently fresh, all data is loaded directly from SQLite.
-        - Intended as the one-stop entry point for data pipeline scheduling and ETL refreshes.
+        A missing database or creation timestamp triggers run(). Otherwise, run()
+        rebuilds whenever the timestamp-tolerance test fails, even if the database
+        timestamp is newer than the JSON file. Errors propagate to the caller.
         """
+        self.db_directory = Path(application_data_directory)
         vprint = print if verbose else (lambda *a, **k: None)
 
-        # 1) Prepare handler (point it at the right directory)
         handler_kwargs = {
             "filename": self.db_filename,
             "directory": application_data_directory
         }
 
-        # 2) If no DB yet → full build
         temp = SQLiteDBHandler(**handler_kwargs)
         if not temp.file_exists():
             vprint("No existing database found. Creating new DB from JSON…")
             return self.run()
 
-        # 3) DB exists, so open a context to get its timestamp
         with SQLiteDBHandler(**handler_kwargs) as dbh:
             created_iso = dbh.get_creation_time()
+        if created_iso is None:
+            return self.run()
         last_db_dt = dtparse.parse(created_iso)
         vprint(f"Database found. Created at: {created_iso}")
 
-        # 4) Inspect JSON arrival
         inspector    = FileInspector(application_data_directory)
         threshold_dt = inspector.last_scheduled_update(hour=update_hour)
         info_map     = inspector.inspect(self.file_path.name, threshold_dt=threshold_dt)
@@ -529,7 +404,6 @@ class CryptoConfig:
                f"Created at: {getattr(file_info, 'creation_time', None)}. "
                f"Scheduled threshold: {threshold_dt}")
 
-        # 5) Compare and choose
         if file_info.exists and dtparse.within_delta(
                 file_info.creation_time,
                 last_db_dt,
@@ -545,120 +419,35 @@ class CryptoConfig:
                 vprint("JSON file missing or too old. Rebuilding database from JSON.")
             return self.run()
             
+    @_crypto_locked
     def run(self):
-        """
-        Executes the complete end-to-end data pipeline: loads JSON configuration,
-        writes all data into the SQLite database (overwriting as needed),
-        and populates in-memory lists (`cryptos`, `exchanges`, `pairs`) from the database.
-
-        Parameters:
-        -----------
-        None
-
-        Returns
-        -----------
-        None
-            Updates all in-memory attributes with the latest data.
-
-        Notes
-        -----------
-        - Always triggers a full refresh, regardless of the current state of the database.
-        - Intended for scheduled refreshes or first-time initialization.
-        """
+        """Stage the input, atomically replace the database, and reload the cache."""
         self.to_json()
         self.to_sqlite()
-        self.parse_db()
 
+    @_crypto_locked
     def run_from_db(self):
-        """
-        Populates all in-memory lists (`cryptos`, `exchanges`, `pairs`) by reading directly
-        from the existing SQLite database, bypassing the JSON file entirely.
-
-        Parameters:
-        -----------
-        None
-
-        Returns
-        -----------
-        None
-            Updates all in-memory attributes with data from the current database.
-
-        Notes
-        -----------
-        - Does not modify or refresh the underlying database.
-        - Useful for fast reloads when the database is already current.
-        """
+        """Reload one committed database generation without modifying it."""
         self.parse_db()
 
 
-# Initialize the config object with your paths.
+# auto_run selects JSON rebuilding or database loading based on freshness checks.
 config = CryptoConfig(
     config_file_path=_CRYPTO_CONFIG_FILE_PATH,
     db_filename=_CRYPTO_DATABASE_FILE
 )
 
-# Use .auto_run() to automatically handle database and JSON freshness.
-# This will:
-#   - Check if the database exists.
-#   - Compare timestamps of the DB and the JSON config file.
-#   - If the DB is up-to-date, load data from the DB (run_from_db).
-#   - If the DB is missing or stale, recreate it from the JSON (run).
-# You do NOT need to call run() or run_from_db() directly.
 config.auto_run(application_data_directory=appdata_local_dir)
 
 
 class Query:
+    """Group lookups for currency pairs, exchanges and cryptocurrencies.
+
+    Currency and Exchange use the JSON data supplied at construction.
+    Coin reads SQLite metadata and caches query results. These query objects
+    are independent of CryptoConfig's live snapshots; recreating or explicitly
+    refreshing a CryptoConfig does not update data already held by a Query.
     """
-    Provides a unified, high-level query interface for cryptocurrency metadata, enabling
-    rapid lookups across fiat currencies, exchanges, and coins/tokens from either in-memory
-    JSON data or a persistent SQLite database.
-
-    Purpose
-    -----------
-    The `Query` class serves as a namespace for specialized inner classes
-    (`Currency`, `Exchange`, `Coin`), each designed to perform efficient searches
-    and lookups on their respective data domains. This abstraction allows flexible,
-    readable, and consistent access patterns for all supported crypto metadata types.
-
-    Structure
-    -----------
-    - Query.Currency:    In-memory lookup for fiat currency pairs; supports search by ID and symbol.
-    - Query.Exchange:    In-memory lookup for crypto exchanges; supports search by ID, name, slug, or identifier.
-    - Query.Coin:        On-disk (SQLite) lookup for coins/tokens; supports search by ID, name, slug, and provides
-                         a slug validation utility. Includes query result caching for high performance.
-    Attributes
-    -----------
-    json_data : dict or None
-        JSON data for fiat pairs and exchanges (passed to Currency and Exchange).
-
-    Methods (by inner class)
-    -----------
-    Currency:
-        - data               : Property, loads and returns fiat currency list.
-        - ID(qID)            : Find currencies matching the given currencyId.
-        - Symbol(symbol)     : Find currencies matching the given symbol (case-insensitive).
-        - SymbolreturnID(symbol): Return the currencyId for the given symbol.
-
-    Exchange:
-        - data               : Property, loads and returns exchange list.
-        - ID(exchange_id)    : Find exchanges by ID.
-        - Name(exchange_name): Find exchanges by name (case-insensitive).
-        - Slug(exchange_slug): Find exchanges by slug (case-insensitive).
-        - FindID(identifier) : Find exchangeId by name or slug.
-
-    Coin:
-        - ID(crypto_id)      : Query coin by ID (from SQLite).
-        - Name(name)         : Query coin by name (case-sensitive, normalized).
-        - Slug(slug)         : Query coin by slug (from SQLite).
-        - ListSlugs()        : List all slugs, names, and symbols.
-
-    Notes
-    -----------
-    - Instantiate each inner class with appropriate JSON or DB file input to enable querying.
-    - Caching is used for high-frequency queries, particularly with coin lookups.
-    - All search methods are designed for interactive as well as programmatic use.
-    - Intended to be used alongside the CryptoConfig pipeline for end-to-end data synchronization and access.
-    """  	
     def __init__(self, json_data=None):
         self.json_data = json_data
 
@@ -764,45 +553,37 @@ class Query:
             return re.sub(r'[^\w\s]', '', ascii_string)
 
         def ID(self, crypto_id):
-            # Check cache first
             if crypto_id in self.cache['ID']:
                 return self.cache['ID'][crypto_id]
             query = 'SELECT * FROM cryptos WHERE id = ?'
             result = self.execute_query(query, (crypto_id,))
-            # Cache the result
             self.cache['ID'][crypto_id] = result
             return result
 
         def Name(self, name):
-            # Check cache first
             if name in self.cache['Name']:
                 return self.cache['Name'][name]
             normalized_name = self.normalize_string(name)
             query = 'SELECT * FROM cryptos WHERE name LIKE ?'
             data = self.execute_query(query, (f'%{normalized_name}%',))
             filtered_data = [item for item in data if self.case_sensitive_search(name, item['name'])]
-            # Cache the result
             self.cache['Name'][name] = filtered_data
             return filtered_data
 
         def Slug(self, slug):
             slug = slug.lower()
-            # Check cache first
             if slug in self.cache['Slug']:
                 return self.cache['Slug'][slug]
             query = 'SELECT * FROM cryptos WHERE slug = ?'
             result = self.execute_query(query, (slug,))
-            # Cache the result
             self.cache['Slug'][slug] = result
             return result
 
         def ListSlugs(self):
-            # Cache ListSlugs globally, as it has no parameters
             if self.cache['ListSlugs'] is not None:
                 return self.cache['ListSlugs']
             query = 'SELECT name, symbol, slug FROM cryptos'
             result = self.execute_query(query, ())
-            # Cache the result
             self.cache['ListSlugs'] = result
             return result
 
@@ -811,13 +592,7 @@ class Query:
 
 
 
-# Create an instance of ExchangeQuery, CurrencyQuery, CoinQuery:
 
-# | Class            | Backing Store | Lookup Types         | Main Use                          |
-# | ---------------- | ------------- | -------------------- | --------------------------------- |
-# | `Query.Currency` | in-memory     | ID, Symbol           | Look up fiat/fiat-pair info       |
-# | `Query.Exchange` | in-memory     | ID, Name, Slug       | Look up crypto exchange info      |
-# | `Query.Coin`     | SQLite DB     | ID, Name, Slug, List | Look up coin/token info (cached)  |
 query = Query()
 CurrencyQuery = query.Currency(json_data=config.pairs)
 ExchangeQuery = query.Exchange(json_data=config.exchanges)
@@ -826,9 +601,7 @@ CoinQuery = query.Coin(file=_CRYPTO_DATABASE_FILE)
 
 
 
-######################################################################
-# FOREX
-######################################################################
+# Forex lookups.
 major_forex_currencies = {
     'AUD': 'Australian Dollar', 'CAD': 'Canadian Dollar', 'CHF': 'Swiss Franc', 'CNY': 'Chinese Yuan Renminbi', 'CZK': 'Czech Koruna',
     'DKK': 'Danish Kroner', 'EUR': 'Euro', 'GBP': 'Pound Sterling', 'HKD': 'Hong Kong Dollar', 'HRK': 'Croatia Kuna',
@@ -869,7 +642,7 @@ all_currency_names = {
     'USD': 'U.S. Dollar', 'UGX': 'Ugandan Shillings', 'UAH': 'Ukraine Hryvnia', 'UYU': 'Uruguayan Peso', 'UZS': 'Uzbekistani Som',
     'VEF': 'Venezuelan Bolivars', 'VND': 'Vietnam Dong', 'YER': 'Yemeni Rials', 'ZMK': 'Zambia Kwacha', 'ZMW': 'Zambian Kwacha'
 }
-forex_major_pairs = {# NASDAQ
+forex_major_pairs = {# Nasdaq symbol mappings.
     "EURUSD": "EURO US DOLLAR", "GBPUSD": "BRITISH POUND US DOLLAR", "USDJPY": "US DOLLAR JAPANESE YEN",
     "USDCHF": "US DOLLAR SWISS FRANC", "USDCAD": "US DOLLAR CANADIAN DOLLAR", "AUDUSD": "AUSTRALIAN DOLLAR US DOLLAR",
     "USDMXN": "US DOLLAR MEXICAN PESO", "USDINR": "US DOLLAR INDIAN RUPEE", "USDRUB": "US DOLLAR RUSSIAN RUBLE",
@@ -877,56 +650,14 @@ forex_major_pairs = {# NASDAQ
 }
 
 class fxutil:
-    """
-    Provides a unified, static interface for querying and validating currency codes and currency pairs
-    across major and minor fiat currencies.
+    """Normalize, tokenize and look up fiat currency codes and pairs.
 
-    Purpose
-    -----------
-    The `fxutil` class acts as a namespace for high-level currency lookup, tokenization, and validation,
-    using internally defined in-memory dictionaries for major and broad-spectrum currencies. This abstraction
-    simplifies the process of working with currency codes in financial, FX, and analytics applications.
-
-    Structure
-    -----------
-    - fxutil.which:    Static inner class for listing available currency codes in both major and broad sets.
-    - fxutil:          Main class contains static methods for string normalization, code lookup, pair validation,
-                           and code formatting.
-
-    Methods (by section)
-    -----------
-    which:
-        - major()                  : Returns a list of all major currency codes.
-        - quote()                  : Returns a list of all available codes from the broader set.
-
-    General:
-        - _join_currency(currency) : Joins a list of one or two 3-letter codes into a single string (e.g., ['USD','JPY'] -> 'USDJPY').
-        - tokenize(currency, as_tuple=False): Splits currency pair strings or lists into separate codes, returning a list or tuple.
-        - query(query, query_type="major", ret_type=None): Looks up currency codes or names in either major or broad set, returning code, name, or both.
-
-    Notes
-    -----------
-    - All methods are static and designed for direct class-level use; no instantiation needed.
-    - The utility methods ensure consistent normalization and validation of user input for FX operations.
-    - Useful for both programmatic and interactive use-cases, including preprocessing for APIs or user input forms.
-    - Throws informative errors for invalid or unrecognized currencies, facilitating robust error handling in client code.
+    Static methods use the module's major and broader currency registries.
+    which lists available codes; query selects code, name, pair or existence
+    results. Validation and missing-value behavior depend on the operation.
     """
     class which:
-        """
-        Provides static methods to enumerate supported fiat currency codes from predefined
-        dictionaries of major and broad-spectrum (including exotic) currencies.
-
-        Purpose
-        -----------
-        The `which` class is designed for quick discovery of available currency codes.
-        It distinguishes between a focused set of major global currencies and a much broader
-        collection used for extended financial, FX, or analytics applications.
-
-        Methods
-        -----------
-        - major(currencies=major_forex_currencies): List all major currency codes.
-        - quote(currencies=all_currency_names): List all codes from the broader currency set.
-        """    	
+        """List codes from the major or broader fiat-currency registry."""
         @staticmethod
         def major(currencies=major_forex_currencies):
             """
@@ -1033,7 +764,6 @@ class fxutil:
         >>> tokenize('usd', as_tuple=True)
         ('USD',)
         """
-        # Normalize to list of strings
         if isinstance(currency, str):
             parts = [currency]
         elif isinstance(currency, list):
@@ -1043,15 +773,13 @@ class fxutil:
         else:
             raise TypeError("Expression only supports str or list of str")
         
-        # 1) Flatten & comma‑split & strip whitespace
         chunks = []
         for part in parts:
-            cleaned = fxutil.redact(part)       # drop all whitespace
+            cleaned = fxutil.redact(part)
             for piece in cleaned.split(','):
                 if piece:
                     chunks.append(piece)
         
-        # 2) Apply regex to each chunk
         codes = []
         for chunk in chunks:
             up = chunk.upper()
@@ -1067,7 +795,6 @@ class fxutil:
         if not codes:
             return None
 
-        # 3) Deduplicate while preserving order
         seen = set()
         unique = []
         for c in codes:
@@ -1075,7 +802,6 @@ class fxutil:
                 seen.add(c)
                 unique.append(c)
 
-        # 4) Return as list
         return unique
        
     @staticmethod
@@ -1137,7 +863,6 @@ class fxutil:
                         return True
                 return (code, name)
 
-        # no match
         if ret_type is not None and ret_type.lower() == "bool":
             return False
         return None
@@ -1145,33 +870,21 @@ class fxutil:
 
 
 def _timezone_info():
-    """
-    Dynamically import and return the appropriate time zone class for working with time zones.
-
-    This function is designed for lazy-loading and backward compatibility, allowing code to
-    work seamlessly with both new and legacy Python environments without module-level imports.
-    """
+    """Return ZoneInfo, falling back to pytz when the standard-library import is unavailable."""
     try:
-        # Python 3.9+
+        # Prefer the standard-library timezone database when available.
         from zoneinfo import ZoneInfo
         return ZoneInfo
     except ImportError:
-        from pytz import timezone as ZoneInfo  # fallback
+        from pytz import timezone as ZoneInfo  # Fall back to the optional pytz timezone implementation.
         return ZoneInfo
        
 class ForexMarketHours:
-    """
-    ForexMarketHours
+    """Check configured UTC trading-session windows and report local time.
 
-    A utility class for determining the open/close status of major Forex trading sessions 
-    (Sydney, Tokyo, London, New York) based on UTC time, and for reporting the current 
-    local time if the market is open. 
-
-    Features:
-        - Converts between UTC and a user-defined local timezone (default "US/Central").
-        - Handles session windows that cross midnight.
-        - Provides convenience methods to check if any Forex session is currently open.
-        - Optionally returns the local time (with timezone and DST awareness) when the market is open.
+    Session windows may cross midnight. Local-time conversion uses the
+    configured timezone, including its DST rules. Session checks use the
+    configured daily hours; they do not consult a holiday calendar.
     """
     # Define the four Forex sessions in UTC
     _SESSIONS_UTC = {
@@ -1187,7 +900,6 @@ class ForexMarketHours:
         The timezone is used for converting UTC time to local time when reporting
         market open status. Defaults to "US/Central".
         """    	
-        # Store a tzinfo object for later conversion
         ZoneInfo = _timezone_info()
         self.local_tz = ZoneInfo(timezone)  
 
@@ -1225,7 +937,7 @@ class ForexMarketHours:
         """
         if not self.is_forex_market_open():
             return None
-        # Convert UTC→Central (with DST baked in)
+        # Convert UTC to the configured local timezone, including DST.
         now_utc = datetime.now(timezone.utc)
         now_central = now_utc.astimezone(self.local_tz)
         return now_central.strftime("%Y-%m-%d %H:%M:%S")

@@ -55,33 +55,12 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # EquityPipelineError,
-    # IPOError,
-    # IPONoDataError,
-    # IPODataUnavailableError,
-    # LatestError,
+from ....date_parser import dtparse
+from ....proxy import Proxy
+from ....exceptions import (
     LatestNoDataError,
     LatestDataUnavailableError,
-    # HistoricalError,
-    # HistoricalNoDataError,
-    # HistoricalDataUnavailableError,
-    # LastTradeError,
-    # LastTradeNoDataError,
-    # LastTradeDataUnavailableError,
-    # QuoteStatisticsError,
-    # QuoteStatisticsValidationError,
-    # QuoteStatisticsNoDataError,
-    # QuoteStatisticsUnavailableError,
-    # CompanyProfileError,
-    # CompanyProfileValidationError,
-    # CompanyProfileNoDataError,
-    # CompanyProfileUnavailableError,
 )
-# from ...markup import idextract
 
 
 __all__ = ['latest']
@@ -89,21 +68,12 @@ __all__ = ['latest']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 
-######################################################################
-# DATA TYPE 2
-######################################################################
 """
 Expected Input: Intraday "Latest" Price and Minute-Bar API Response ("spark" endpoint)
 
@@ -230,7 +200,7 @@ class latest:
         else: raise LatestDataUnavailableError(f"Unsupported JSON type: {type(payload)}")
         if isinstance(node, dict) and len(node) == 1:
             key = next(iter(node))
-            if isinstance(key, str) and '+' in key: node = node[key]
+            if isinstance(key, str) and key.startswith(('https://', 'http://')): node = node[key]
         if isinstance(node, dict) and "response" in node: node = node["response"]
         else: raise LatestDataUnavailableError("Missing 'response' field")
         if isinstance(node, dict) and "spark" in node: node = node["spark"]
@@ -264,7 +234,8 @@ class latest:
     def DATA(self):
         ts = self.latest_timestamp; price = self.latest_price; rm_tm = self.meta.get("regularMarketTime")
         result = {
-            "Ticker": self.symbol, "Price": price,
+            "Ticker": self.symbol, "Price": price, "Currency": self.meta.get("currency"),
+            "quoteTimeUTC": dtparse.unix_timestamp(ts, format='%Y-%m-%dT%H:%M:%SZ', utc=True, to_unix=False),
             "lastPriceTime": dtparse.unix_timestamp(ts, format='%Y-%m-%d %I:%M %p', to_unix=False),
             "regularMarketTime": dtparse.unix_timestamp(rm_tm, format='%Y-%m-%d %I:%M %p', to_unix=False),
         }
@@ -274,6 +245,7 @@ class latest:
             if self.shortName: result["shortName"] = self.shortName
         if "Name" in result: order = ['Ticker', 'Name', 'Price', 'lastPriceTime', 'regularMarketTime']
         else: order = ['Ticker', 'longName', 'shortName', 'Price', 'lastPriceTime', 'regularMarketTime']
+        order.extend(['Currency', 'quoteTimeUTC'])
         return {k: result[k] for k in order if k in result}
     def __repr__(self):
         count = len(self.timestamps) if self.timestamps else 0

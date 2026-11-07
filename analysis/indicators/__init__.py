@@ -52,7 +52,6 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from .dmi import DirectionalMovementIndex
 from .aroon import AroonIndicator
 from .obv import OnBalanceVolume

@@ -53,9 +53,7 @@
 #
 
 import re
-# from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
 from .market_utils import fxutil, equityquery, CoinQuery
 from ..date_parser import dtparse
 from ..exceptions import (
@@ -81,49 +79,16 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 class instrument_validation:
+    """Validate ticker symbols, currency pairs and cryptocurrency slugs.
+
+    Stock checks select a standard, Yahoo or Nasdaq mapping from the local
+    registry. Currency checks normalize and validate codes against the selected
+    currency set. Slug checks use the local cryptocurrency database.
+    Successful checks store their result in validated_instrument; invalid
+    identifiers raise the corresponding instrument exception.
     """
-    Centralized validation utility for financial instrument identifiers.
-
-    This class provides methods to validate and standardize identifiers for stocks (ticker symbols),
-    foreign exchange (FX) currency pairs, and cryptocurrencies (slug names), each against internal
-    or third-party registries.
-
-    Workflow and Design Steps:
-    1. **Initialization:** Tracks the most recently validated instrument in `self.validated_instrument`
-       for convenient reuse or chaining across batch operations.
-    2. **Stock Ticker Validation (`stock_ticker`):**
-       - Strips and normalizes the input.
-       - Searches in one of several registries (standard, Yahoo, or Nasdaq) according to the `search_type`.
-       - Sets `self.validated_instrument` to the validated ticker if found, otherwise raises an error.
-    3. **FX Currency Pair Validation (`fx_currency`):**
-       - Accepts currency pairs as strings (with or without separators) or as lists.
-       - Tokenizes, normalizes, and validates both currencies against the chosen registry.
-       - Returns the canonical 6-letter pair and stores it in `self.validated_instrument`, raising an error if not valid.
-    4. **Cryptocurrency Slug Validation (`crypto_slug_name`):**
-       - Accepts a string slug, normalizes to lowercase, and checks against the local database.
-       - If found, stores a tuple of (slug, id) in `self.validated_instrument`.
-       - Raises an error for missing, malformed, or unrecognized slugs.
-    5. **Error Handling:**
-       - All methods raise clear, descriptive exceptions on failure (e.g., unknown symbol, invalid currency, invalid slug).
-    6. **Intended Use:**
-       - This class is designed for internal system validation of instruments and is not intended as a public-facing API.
-       - Methods are intended to be used programmatically for robust, reliable identifier verification in finance/data applications.
-
-    Example usage:
-        validate = instrument_validation()
-        _validate.stock_ticker("AAPL")
-        _validate.fx_currency("EURUSD")
-        _validate.crypto_slug_name("bitcoin")
-        print(_validate.validated_instrument)
-    """	
     def __init__(self): self.validated_instrument = None
 
     def stock_ticker(self, ticker, search_type="standard"):
@@ -173,14 +138,9 @@ class instrument_validation:
 
 
 class _normalizeDate:
-    """
-    Utility class for normalizing and validating date ranges, supporting conversion
-    to Unix timestamp, UTC timestamp, or any strftime-compatible format. Mimics the
-    logic of the original _normalize_dates function, but with an object-oriented API.
+    """Normalize date ranges to Unix seconds, UTC Unix seconds or strftime output.
 
-    Usage:
-        normalizer = _normalizeDate()
-        start, end = normalizer.norm(start_date="2023-01-01", end_date="2023-06-01", date_format="unix")
+    norm() supports optional start/end clipping.
     """
     def __init__(self): pass
 
@@ -207,14 +167,11 @@ class _normalizeDate:
         return start_date, end_date
 
 
-######################################################################
-# EQUITY DATA ROUTING AND URL CONSTRUCTION INTERFACE
-######################################################################
+# Equity URL routing.
 
 
-#---- LASTN METHOD -----------------
 
-# Maximum allowed data points before interval is auto-bumped (for performance)
+# Coarsen the interval above this point count to bound response size.
 _MAX_POINTS = 100_000
 
 # Aliases for valid interval strings (maps variations to standardized code)
@@ -331,16 +288,16 @@ def _days_from_range(rng):
     except KeyError:
         raise ValueError(f"Unsupported range '{rng}'. Valid: {_RANGE_TO_DAYS.keys() | {'ytd','max'}}")
 
-# Maps range name to an approximate number of days for that range
+# Approximate duration of each interval, in minutes.
 _INTERVAL_TO_MINUTES = {
     "1m":   1,
     "2m":   2,
     "5m":   5,
     "15m": 15,
     "30m": 30,
-    # "60m": 60,  # commented out, use "1h" for 60m
+    # Use "1h" as the canonical spelling for a 60-minute interval.
     "90m": 90,
-    "1h":   60,      # alias for 60m
+    "1h":   60,
     "1d": 1440,
     "5d": 5 * 1440,
     "1wk": 7 * 1440,
@@ -348,10 +305,10 @@ _INTERVAL_TO_MINUTES = {
     "3mo": 90 * 1440,
 }
 
-# Hard limits on how many days can be fetched at minute-level intervals (API-imposed)
+# Provider history limits for minute-level intervals.
 _MAX_RANGE_FOR_INTERVAL_DAYS = {
-    "1m": 7,  # 1 minute interval can only go back 7 days
-    **{iv: 60 for iv in ["2m","5m","15m","30m","60m","90m","1h"]},  # these intervals: max 60 days
+    "1m": 7,  # One-minute intervals allow at most seven days of history.
+    **{iv: 60 for iv in ["2m","5m","15m","30m","60m","90m","1h"]},  # These intervals allow at most 60 days of history.
 }
 
 # List of intervals in order of increasing coarseness (1m -> 3mo)
@@ -388,16 +345,15 @@ def _auto_adjust_interval(rng, iv):
     raw_points = float("inf") if days == float("inf") else days * 1440 / base_minutes
 
     if raw_points <= _MAX_POINTS:
-        return iv  # Already below threshold
+        return iv
 
-    # Try each coarser interval in sequence
     idx = _INTERVAL_SEQUENCE.index(iv)
     for next_iv in _INTERVAL_SEQUENCE[idx + 1 :]:
         pts = days * 1440 / _INTERVAL_TO_MINUTES[next_iv]
         if pts <= _MAX_POINTS:
             return next_iv
 
-    # Even coarsest interval is too granular, suggest shrinking range
+    # A smaller range is required when even the coarsest interval exceeds the limit.
     max_days = int(_MAX_POINTS * base_minutes / 1440)
     raise ValueError(
         f"Even '{_INTERVAL_SEQUENCE[-1]}' yields more than {_MAX_POINTS:,} points. "
@@ -419,18 +375,15 @@ class AliasMapper:
     def __init__(self, **mapping_dicts):
         if not mapping_dicts:
             raise ValueError("Provide at least one mapping dict: e.g. intervals=..., ranges=...")
-        self._maps = {}           # name → original mapping
-        self._lower_maps = {}     # name → {lower_key: key}
-        self._inverse_maps = {}   # name → {lower_synonym: key}
+        self._maps = {}
+        self._lower_maps = {}
+        self._inverse_maps = {}
         for name, mapping in mapping_dicts.items():
-            # store original
             self._maps[name] = mapping
 
-            # build lower-key map
             lower_key = {key.lower(): key for key in mapping}
             self._lower_maps[name] = lower_key
 
-            # build inverse map from every synonym→key
             inv = {}
             for key, val in mapping.items():
                 syns = val if isinstance(val, list) else [val]
@@ -438,7 +391,6 @@ class AliasMapper:
                     inv[syn.lower()] = key
             self._inverse_maps[name] = inv
 
-        # pick the first mapping name as default
         self._default = next(iter(mapping_dicts))
 
     def lookup(self, s, *, mapping=None, invert=False, collapse_space=True):
@@ -481,33 +433,26 @@ class AliasMapper:
         token = s.strip().lower()
         key = None
 
-        # 1) exact key?
         if token in lower_key_map:
             key = lower_key_map[token]
 
-        # 2) exact synonym?
         elif token in inverse_map:
             key = inverse_map[token]
 
-        # 3) try collapsing or expanding space for number+word
         elif collapse_space:
-            # a) joined → spaced
             m = re.match(r'^(\d+)([a-z]+)$', token)
             if m:
                 spaced = f"{m.group(1)} {m.group(2)}"
                 return self.lookup(spaced, mapping=name, invert=invert, collapse_space=False)
 
-            # b) spaced → joined
             m = re.match(r'^(\d+)\s+([a-z]+)$', token)
             if m:
                 joined = f"{m.group(1)}{m.group(2)}"
                 return self.lookup(joined, mapping=name, invert=invert, collapse_space=False)
 
-        # 4) give up?
         if key is None:
             return None
 
-        # 5) return key or its synonyms
         if not invert:
             return key
 
@@ -515,13 +460,10 @@ class AliasMapper:
         return val[:] if isinstance(val, list) else [val]
 
 
-# Global validation utility for instrument (stock, FX, crypto) normalization and error checking
 _validate        = instrument_validation()
 
-# Initialize the date normalization helper (with dtparse) for all date parsing, validation, and formatting needs
 _normalize_dates = _normalizeDate()
 
-# Instantiate alias mapper with two mappings, named however we like, in this case "intervals" and "ranges":
 _aliasmap       = AliasMapper(
     intervals=_VALID_INTERVAL_ALIASES,
     ranges=_VALID_RANGE_ALIASES

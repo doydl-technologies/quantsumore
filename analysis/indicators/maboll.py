@@ -52,25 +52,20 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['MovingAveragesAndBollingerBands']
 
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
+
+
+from ._averages import seeded_average
 
 
 class MovingAveragesAndBollingerBands:
@@ -82,11 +77,9 @@ class MovingAveragesAndBollingerBands:
         self.bb_period = bb_period
         self.bb_std = bb_std
 
-        # Verify sufficient data before proceeding
         max_period = max(self.sma_period, self.ema_period, self.bb_period)
         self.parent.verify_period_sufficiency(max_period)
 
-        # Calculate indicators and signals
         self._calculate_sma()
         self._calculate_ema()
         self._calculate_bollinger_bands()
@@ -96,12 +89,13 @@ class MovingAveragesAndBollingerBands:
         self.df['SMA'] = self.df['Close'].rolling(window=self.sma_period).mean()
 
     def _calculate_ema(self):
-        self.df['EMA'] = self.df['Close'].ewm(span=self.ema_period, adjust=False).mean()
+        self.df['EMA'] = seeded_average(self.df['Close'], self.ema_period)
 
     def _calculate_bollinger_bands(self):
         self.df['BB_Middle'] = self.df['Close'].rolling(window=self.bb_period).mean()
-        self.df['BB_Upper'] = self.df['BB_Middle'] + (self.bb_std * self.df['Close'].rolling(window=self.bb_period).std())
-        self.df['BB_Lower'] = self.df['BB_Middle'] - (self.bb_std * self.df['Close'].rolling(window=self.bb_period).std())
+        deviation = self.df['Close'].rolling(window=self.bb_period).std(ddof=0)
+        self.df['BB_Upper'] = self.df['BB_Middle'] + self.bb_std * deviation
+        self.df['BB_Lower'] = self.df['BB_Middle'] - self.bb_std * deviation
 
     def _detect_crossovers(self):
         self.df['Signal'] = 'None'
@@ -127,7 +121,6 @@ class MovingAveragesAndBollingerBands:
         plt.plot(self.df['Date'], self.df['BB_Lower'], label='Bollinger Lower Band', color='orange')
         plt.fill_between(self.df['Date'], self.df['BB_Upper'], self.df['BB_Lower'], color='orange', alpha=0.1)
 
-        # Highlight Buy and Sell signals
         plt.scatter(self.df[self.df['Signal'] == 'Buy']['Date'],
                     self.df[self.df['Signal'] == 'Buy']['Close'], color='green', label='Buy Signal', marker='^')
         plt.scatter(self.df[self.df['Signal'] == 'Sell']['Date'],

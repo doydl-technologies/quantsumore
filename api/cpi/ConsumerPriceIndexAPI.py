@@ -52,134 +52,7 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-"""
-ConsumerPriceIndexAPI — Unified CPI and Inflation Adjustment Interface
-══════════════════════════════════════════════════════════════════════
-
-Purpose
-───────
-    The `ConsumerPriceIndexAPI.py` module delivers a streamlined, provider-agnostic interface
-    for retrieving, analyzing, and adjusting for inflation using official Consumer Price Index (CPI)
-    time series data within the Quantsumore library. It abstracts away external data quirks and
-    provides reliable inflation calculation utilities, allowing users to query raw CPI values or
-    perform dollar-value adjustments across years and months with minimal effort.
-
-Key Capabilities
-────────────────
-- **Fetches Official CPI Data:** Retrieves and parses Consumer Price Index data for “All Urban Consumers”
-  (series ID: `CPIAUCNS` or variants), directly from the FRED (Federal Reserve Economic Data) system.
-- **Canonical DataFrame Output:** All CPI data is returned as pandas DataFrames with normalized columns
-  (`series_id`, `year`, `period`, `value`), including monthly and annual averages.
-- **No API Key Needed:** All CPI and inflation utilities work out of the box without authentication.
-- **Inflation Adjustment Utilities:** Provides drop-in methods for converting historical dollar amounts to
-  current dollars (or any target year), as well as year-by-year and month-by-month inflation adjustment.
-- **Strict Validation:** Every query is validated for valid series IDs, date ranges, and amount types, with
-  explicit error reporting for out-of-bounds or malformed inputs.
-- **Extensible:** While focused on the flagship CPI series for all urban consumers, the design supports
-  any compatible FRED time series for economic indicators.
-
-Design Overview
-───────────────
-- **Single Entry Point:** End users interact only with the top-level `APIClient`, which auto-initializes
-  all helper classes (notably `CPI_U`) and orchestrates all CPI data requests and inflation adjustment.
-- **Data Routing and Normalization:** All URL building, FRED-series normalization, and HTML/CSV parsing
-  are abstracted in the `prep.py` adapter registry and the `cpi` parser.
-- **Automatic Inflation Adjustment:** The `CPI_U` property on every client exposes an `InflationAdjustment`
-  property, which wraps a dedicated inflation adjustment class initialized with up-to-date CPI data.
-- **DataFrame-first:** All CPI data is fetched, parsed, and returned as pandas DataFrames, ensuring
-  consistency and downstream compatibility for analysis and modeling.
-- **Real-time/Recent Data:** By default, all methods use the latest available CPI data, automatically
-  adjusting for any reporting lag.
-
-Typical Workflow
-────────────────
-1. **Install and Import:**
-       from quantsumore.api import cpi
-2. **Initialize the Client:**
-       engine = cpi.APIClient(cpi.cpi_adapter)
-3. **Fetch All-Urban CPI Data:**
-       df = engine._all_urban(series_id='CPIAUCNS')    # Returns a DataFrame with year/month CPI values
-4. **Access Inflation Adjustment Helper:**
-       inflation = engine.CPI_U.InflationAdjustment
-5. **Inflation-adjust a Dollar Amount:**
-       adjusted = inflation.select(original_amount=100, original_year=1980, target_year=2024, month_input='March')
-       print(adjusted)   # e.g., "$100 from 1980 is equivalent to $362.47 in 2024 dollars."
-6. **Year-by-Year Inflation History:**
-       results = inflation.year_by_year(original_amount=50, n_years=10)  # Returns {2014: value, ..., 2023: value}
-7. **Month-by-Month for Current Year:**
-       monthly = inflation.month_by_month(amount=100)
-
-Class Structure
-───────────────
-- **APIClient(adapter)**
-    - Core client for CPI queries. Automatically creates:
-        - `CPI_U` (exposes inflation adjustment methods for “All Urban Consumers”)
-    - Methods:
-        - `._all_urban(series_id='CPIAUCNS')` — Fetch CPI DataFrame for specified FRED series.
-- **APIClient._CPI_U**
-    - Internal helper class (attached as `CPI_U`) for all-urban CPI workflows.
-    - Properties:
-        - `.InflationAdjustment` — Returns a `_InflationAdjustment` instance, initialized with latest CPI data.
-- **_InflationAdjustment(data)**
-    - Used internally by API to perform robust inflation adjustment using provided CPI DataFrame.
-    - Key Methods:
-        - `.select(original_amount, original_year, target_year, month_input)` — Adjusts amount to target year.
-        - `.year_by_year(original_amount, n_years)` — Adjusts amount for each of last n years.
-        - `.month_by_month(amount)` — Adjusts amount for each month of current year.
-
-Return Types and Data Structures
-────────────────────────────────
-- **CPI DataFrame:** Columns: `series_id`, `year`, `period` (month or 'Average'), `value` (index).
-- **Inflation-adjusted Value:** Float (rounded to 2 decimals).
-- **Year/Month Mapping:** Dict mapping year or month to adjusted float values.
-
-Supported Data Series
-────────────────────
-- Default: `"CPIAUCNS"` (Consumer Price Index for All Urban Consumers: All Items in U.S. City Average)
-- Other FRED series supported by passing a different `series_id`.
-
-Error Handling
-──────────────
-- `ValueError`: Raised on invalid amount/year/month/n_years, or if data is missing.
-- `CPIDataUnavailableError`, `CPIDateParseError`: Raised on fetch/parse failures or malformed source data.
-
-Design & Implementation Highlights
-─────────────────────────────────
-- **Automatic Normalization:** All months are normalized (e.g., `'03'`, `'Mar'`, `'March'` → `'March'`)
-- **Fallbacks:** If month-specific CPI data is missing, calculations fall back to yearly average with clear warning.
-- **No External Provider Lock-In:** All upstream requests route through `prep.py`, with FRED as default data source.
-
-Example Usage
-─────────────
-    >>> from quantsumore.api import cpi
-    >>> engine = cpi.APIClient(cpi.cpi_adapter)
-    >>> df = engine._all_urban()
-    >>> print(df.head())
-
-    >>> inflation = engine.CPI_U.InflationAdjustment
-    >>> inflation.select(100, 1975, 2024, 'Average')  # $100 in 1975 → $572.31 in 2024
-
-    >>> inflation.year_by_year(50, 5)    # Show value of $50 for each of last 5 years
-    {2019: 52.14, 2020: 52.99, ...}
-
-    >>> inflation.month_by_month(25)     # How does $25 change, Jan–Dec, this year?
-    {'January': 24.96, 'February': 25.01, ...}
-
-Reference Table: Method Inputs/Outputs
-──────────────────────────────────────
-| Method            | Input(s)                                                       | Output               | Notes                                 |
-|-------------------|----------------------------------------------------------------|----------------------|---------------------------------------|
-| _all_urban        | series_id                                                      | DataFrame            | CPI for all-urban                     |
-| select            | original_amount, original_year, target_year, month_input			 | float                | Adjusts amount to target year         |
-| year_by_year      | original_amount, n_years                                       | dict                 | Last n years                          |
-| month_by_month    | amount                                                         | dict                 | All months, current                   |
-
-Attribution
-───────────
-- All data is retrieved from the Federal Reserve Economic Data (FRED) system, “Consumer Price Index for All Urban Consumers: All Items in U.S. City Average” (CPIAUCNS) or as specified.
-- No API key or authentication required. No affiliation with, or endorsement by, the U.S. Federal Reserve.
-"""
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
+"""Retrieve CPI data and calculate inflation adjustments."""
 from ..prep import cpi_adapter
 from .parse._inflation import CUUR0000AA0 
 
@@ -187,22 +60,15 @@ from .parse._inflation import CUUR0000AA0
 __all__ = ['engine']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
 class APIClient:
     def __init__(self, adapter):
         self.adapter = adapter
-        self.CPI_U = self._CPI_U(self) # Auto create CPI_U instance that knows about its parent APIClient instance
+        self.CPI_U = self._CPI_U(self)
        
     def _all_urban(
         self,
         series_id='CPIAUCNS',
-        # api_key=None   # <-- api key no longer required
     ):  
         """
         Fetches and returns Consumer Price Index (CPI) data for all urban consumers.
@@ -219,102 +85,45 @@ class APIClient:
 
         Returns:
         -------
-        pandas.DataFrame or None
+        pandas.DataFrame
             A DataFrame containing the processed CPI data for the requested series. Columns typically include:
             - 'year': The year of the CPI data.
             - 'period': The period or month (e.g., 'January', 'Average').
             - 'value': The CPI value for the specified period.
-            If data retrieval fails, returns None.
+            Request, HTTP and parsing failures raise CPIDataUnavailableError
+            with the underlying error available as its cause. Requests use
+            bounded connect/read timeouts rather than scraping an HTML page.
         """    	
-        make_method = getattr(self.adapter, 'make')
-        url = make_method(series_id=series_id)
+        return CUUR0000AA0.Data(series_id=series_id).all_items_index()
 
-        # Fetch
-        headers = {"User-Agent": "Mozilla/5.0"}
-        import requests # Third-party library imports (from PyPI or other package sources)        
-        resp = requests.get(url, headers=headers)
-        resp.raise_for_status()  # Optional: will raise an error for 4xx/5xx responses
-        content = resp.text
-        if not content:
-            return None  # Or raise a warning/log it
-        else:        
-            obj1 = CUUR0000AA0.Date(content)
-            end_date = obj1.date()
-            obj2 = CUUR0000AA0.Data(end_date=end_date)
-            data = obj2.all_items_index()
-            return data          
-
-    # Notes:
-    # -----
-    # This class is intended for internal use within APIClient and is accessed via
-    # the CPI_U property. It provides a streamlined interface for CPI data access
-    # and inflation adjustment calculations.
+    # Internal CPI interface, exposed through APIClient.CPI_U.
     class _CPI_U:
-        """
-        Private helper class for managing Consumer Price Index (CPI) adjustments for all urban consumers.
+        """Expose inflation calculations through the parent client's CPI retrieval.
 
-        This class acts as an interface for accessing and adjusting for inflation using CPI data.
-        It leverages the parent APIClient's data retrieval methods to ensure all adjustments use up-to-date CPI data.
-        Access is provided via the InflationAdjustment property, which initializes an inflation adjustment
-        helper using freshly fetched CPI data.
-
-        Attributes:
-        ----------
-        engine : APIClient
-            Reference to the parent APIClient instance for data access and method calls.
-
-        Properties:
-        ----------
-        InflationAdjustment : _InflationAdjustment
-            Property that initializes and returns an _InflationAdjustment instance
-            using CPI data fetched via the parent's _all_urban method. Ensures all
-            inflation adjustments are based on the most current data.
+        Each InflationAdjustment access fetches CPI data and constructs a helper.
+        Availability and observation dates depend on the returned provider data.
         """
         def __init__(self, engine):
             self.engine = engine
 
         @property
         def InflationAdjustment(self):
-            data = self.engine._all_urban() # Property ensures that we can access InflationAdjustment
+            data = self.engine._all_urban()
             return _InflationAdjustment(data)
            
     def __dir__(self):
         return ['CPI_U'] 
 
 
-# Notes:
-# -----
-# This class is not intended for direct use by end users, but rather as a behind-the-scenes utility
-# for inflation adjustment in financial data pipelines, web APIs, or analytic tools.
+# Internal inflation-adjustment helper for the CPI interface.
 class _InflationAdjustment:
+    """Calculate inflation adjustments from supplied CPI observations.
+
+    data must support the DataFrame operations used for year, period and value
+    columns. Month normalization accepts numbers, abbreviations and names.
+    Calculations use yearly averages or available monthly observations; select()
+    falls back to yearly averages when either requested month is missing.
     """
-    Helper class for inflation adjustment calculations using Consumer Price Index (CPI) data.
-
-    This class is designed to facilitate the calculation of inflation-adjusted monetary values
-    based on historical and current CPI data. It is used internally by the API to provide accurate
-    conversions of dollar amounts between different years and months, making it easy to analyze the
-    changing value of money over time.
-
-    Core Features:
-    -------------
-    - Normalizes diverse month representations (e.g., '03', 'Mar', 'March') to a standard format.
-    - Validates and processes monetary amounts, years, months, and period ranges for calculation.
-    - Calculates the equivalent value of an amount from one year in the currency of another year,
-      supporting both yearly averages and specific months.
-    - Provides utilities for year-by-year and month-by-month inflation adjustment, using the most
-      recent CPI data available.
-    - Raises clear, descriptive errors if inputs are invalid or if the required CPI data is missing.
-
-    Parameters:
-    ----------
-    data : pandas.DataFrame
-        CPI data as a DataFrame, with columns for 'year', 'period' (month), and 'value' (CPI index).
-
-    Raises:
-    ------
-    ValueError
-        If the provided data is None or does not support the required operations.
-    """	
     def __init__(self, data):
         if data is None:
             raise ValueError("Failed to fetch or process CPI data.")
@@ -335,7 +144,13 @@ class _InflationAdjustment:
             '11': 'November', 'November': 'November', 'Nov': 'November',
             '12': 'December', 'December': 'December', 'Dec': 'December'
         }
-        self.current_month = self.data[(self.data['year'] == self.max_year) & (self.data['period'] != 'Average')].sort_values(by='period', key=lambda x: x.apply(self._normalize_month))['period'].iloc[-1]
+        months = self.data.loc[
+            (self.data['year'] == self.max_year) & (self.data['period'] != 'Average'), 'period'
+        ].map(self._normalize_month)
+        if months.empty or months.isna().any():
+            raise ValueError("CPI data must contain valid monthly observations for its latest year.")
+        month_order = {self.month_map[str(number)]: number for number in range(1, 13)}
+        self.current_month = max(months, key=month_order.__getitem__)
 
     def _normalize_month(self, month_input):
         """
@@ -460,7 +275,6 @@ class _InflationAdjustment:
         float
             The adjusted value in the target year's dollars, rounded to two decimal places.
         """
-        # Validate and convert inputs
         original_amount, original_year, month, _  = self._validate(amount=original_amount, year=original_year, month=month_input)
         _, target_year, _, _ = self._validate(year=target_year)
 
@@ -501,7 +315,6 @@ class _InflationAdjustment:
             A dictionary where each key is a year and the value is the inflation-adjusted amount
             for that year, rounded to two decimal places.
         """
-        # Validate and convert inputs
         original_amount, _, _, n_years = self._validate(amount=original_amount, n_years=n_years)
         results = {}
         current_cpi = self._get_cpi(self.max_year, self.current_month) or self._get_cpi(self.max_year, 'Average')

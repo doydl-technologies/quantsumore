@@ -52,24 +52,16 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ..proxy import Proxy
+from ...proxy import Proxy
 
 __all__ = ['DirectionalMovementIndex']
 
 
         
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire modules; actual imports occurs on first use.
-# pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
-plt = Proxy("matplotlib.pyplot")  # Third-party library imports (from PyPI or other package sources)  
-np = Proxy("numpy")  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+plt = Proxy("matplotlib.pyplot")
+np = Proxy("numpy")
 
 
 class DirectionalMovementIndex:
@@ -79,7 +71,7 @@ class DirectionalMovementIndex:
         self.period = period
         self.adx_threshold = adx_threshold
 
-        self.parent.verify_period_sufficiency(self.period)
+        self.parent.verify_period_sufficiency(2 * self.period)
         self._calculate_indicators()
         self._calculate_signals()
 
@@ -98,14 +90,26 @@ class DirectionalMovementIndex:
             np.maximum(self.df['Low'].shift(1) - self.df['Low'], 0), 0
         )
 
-        self.df['ATR'] = self.df['TR'].rolling(window=self.period).mean()
-        self.df['+DM_smooth'] = self.df['+DM'].rolling(window=self.period).mean()
-        self.df['-DM_smooth'] = self.df['-DM'].rolling(window=self.period).mean()
+        from ._averages import seeded_average
 
-        self.df['+DI'] = 100 * (self.df['+DM_smooth'] / self.df['ATR'])
-        self.df['-DI'] = 100 * (self.df['-DM_smooth'] / self.df['ATR'])
-        self.df['DX'] = 100 * (abs(self.df['+DI'] - self.df['-DI']) / (self.df['+DI'] + self.df['-DI']))
-        self.df['ADX'] = self.df['DX'].rolling(window=self.period).mean()
+        size = len(self.df)
+        plus, minus, ranges = (self.df[column].to_numpy(dtype=float) for column in ('+DM', '-DM', 'TR'))
+        plus_sum, minus_sum, range_sum = (float(values[1:self.period].sum()) for values in (plus, minus, ranges))
+        smooth = np.full((size, 3), np.nan)
+        for position in range(self.period, size):
+            plus_sum += plus[position] - plus_sum / self.period
+            minus_sum += minus[position] - minus_sum / self.period
+            range_sum += ranges[position] - range_sum / self.period
+            smooth[position] = plus_sum, minus_sum, range_sum
+        self.df['+DM_smooth'] = smooth[:, 0]
+        self.df['-DM_smooth'] = smooth[:, 1]
+        self.df['TR_smooth'] = smooth[:, 2]
+        self.df['ATR'] = seeded_average(self.df['TR'], self.period, start=self.period, alpha=1 / self.period)
+        self.df['+DI'] = (100 * self.df['+DM_smooth'] / self.df['TR_smooth']).where(self.df['TR_smooth'] != 0, 0)
+        self.df['-DI'] = (100 * self.df['-DM_smooth'] / self.df['TR_smooth']).where(self.df['TR_smooth'] != 0, 0)
+        denominator = self.df['+DI'] + self.df['-DI']
+        self.df['DX'] = (100 * abs(self.df['+DI'] - self.df['-DI']) / denominator).where(denominator != 0, 0)
+        self.df['ADX'] = seeded_average(self.df['DX'], self.period, start=2 * self.period - 1, alpha=1 / self.period)
 
     def _calculate_signals(self):
         self.df['Buy_Signal'] = np.where(
@@ -125,7 +129,7 @@ class DirectionalMovementIndex:
         return self.df[['Date', '+DI', '-DI', 'ADX', 'Buy_Signal', 'Sell_Signal', 'Strong_Buy', 'Strong_Sell']]
 
     def get_trend_strength(self):
-        import numpy as _np  # safe to import local; or reuse Proxy if you want
+        import numpy as _np
         conditions = [
             (self.df['ADX'] >= 25),
             (self.df['ADX'] < 25) & (self.df['ADX'] >= 20),

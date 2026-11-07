@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantsumore"
-version = "3.0.0b2"
+version = "3.0.0b3"
 description = "Retired and unsupported financial-market data client preserved for archival use."
 readme = "README.md"
-requires-python = ">=3.8"
-license = { file = "LICENSE" }
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
   { name = "Cedric Moore Jr." },
 ]
@@ -16,15 +17,12 @@ keywords = ["finance", "market-data", "retired", "unsupported"]
 classifiers = [
   "Development Status :: 7 - Inactive",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
   "Natural Language :: English",
   "Operating System :: MacOS :: MacOS X",
   "Operating System :: Microsoft :: Windows",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   "beautifulsoup4",
@@ -39,13 +37,16 @@ dependencies = [
   "requests-cache",
 ]
 
+[project.optional-dependencies]
+test = ["TA-Lib==0.6.8"]
+
 [project.urls]
-Homepage = "https://github.com/cedricmoorejr/quantsumore"
-"Retirement notice" = "https://github.com/cedricmoorejr/quantsumore/blob/main/ARCHIVED.md"
-Source = "https://github.com/cedricmoorejr/quantsumore"
+Homepage = "https://github.com/doydl-technologies/quantsumore"
+"Retirement notice" = "https://github.com/doydl-technologies/quantsumore/blob/main/ARCHIVED.md"
+Source = "https://github.com/doydl-technologies/quantsumore"
 
 [tool.setuptools]
-include-package-data = true
+include-package-data = false
 packages = [
   "quantsumore",
   "quantsumore._http",
@@ -80,4 +81,5 @@ quantsumore = [
   "files/crypto/*.json",
   "gui/assets/*.ico",
   "gui/assets/*.png",
+  "assets/png/*.png",
 ]

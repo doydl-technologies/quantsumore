@@ -58,33 +58,12 @@ from copy import deepcopy
 from html import unescape as html_unescape
 from collections.abc import Mapping
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # EquityPipelineError,
-    # IPOError,
-    # IPONoDataError,
-    # IPODataUnavailableError,
-    # LatestError,
-    # LatestNoDataError,
-    # LatestDataUnavailableError,
-    # HistoricalError,
-    # HistoricalNoDataError,
-    # HistoricalDataUnavailableError,
-    # LastTradeError,
-    # LastTradeNoDataError,
-    # LastTradeDataUnavailableError,
-    # QuoteStatisticsError,
-    # QuoteStatisticsValidationError,
-    # QuoteStatisticsNoDataError,
-    # QuoteStatisticsUnavailableError,
+from ....proxy import Proxy
+from ....exceptions import (
     CompanyProfileError,
     CompanyProfileValidationError,
     CompanyProfileNoDataError,
-    # CompanyProfileUnavailableError,
 )
-# from ...markup import idextract
 
 
 __all__ = ['profile']
@@ -92,21 +71,12 @@ __all__ = ['profile']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 
-######################################################################
-# DATA TYPE 1
-######################################################################
 """
 Expected Input: Company Profile Data API Response (Index/Node-Mapped Format)
 
@@ -351,7 +321,6 @@ Notes:
 
 This structure is highly compact but non-intuitive—**always use the provided index mapping** for extraction.
 """
-# A class to identify and remove session/cookie preference payloads from data structures.
 class _SessionPrefsCleaner:
     SESSION_SIGNATURE_KEYS = {"session", "cookies", "loc", "theme", "chartTheme", "hideNewsSources", "ab"}
     def __init__(self, preserve_positions: bool = True):
@@ -426,7 +395,6 @@ class _SessionPrefsCleaner:
             return new_list
         return deepcopy(obj)
 
-    # Convenience: drop session prefs from the provided structure.
     def clean(self, struct: any) -> any:
         return self.drop_session_anywhere(struct)
 
@@ -459,7 +427,6 @@ class _ParsedDataSquasher:
         return _ParsedDataSquasher._remove_outer_key(out)
    
    
-# Utilities to validate/normalize __data.json, parse nodes, clean fields, and replace empty/None values.
 class _profileParse:
     _QUOTE_KEYS = {
         "c":"change","e":"market_open","h":"high","l":"low","o":"open","p":"previous_close",
@@ -498,7 +465,7 @@ class _profileParse:
         else: raise CompanyProfileError(f"Unsupported response type: {type(payload)}")
         if isinstance(node, dict) and len(node) == 1:
             k = next(iter(node))
-            if isinstance(k, str) and '+' in k: node = node[k]
+            if isinstance(k, str) and k.startswith(('https://', 'http://')): node = node[k]
         if isinstance(node, dict) and "response" in node: node = node["response"]
         if not isinstance(node, dict): raise CompanyProfileError("Unexpected structure after unwrapping URL/response")
         if node.get("type") == "data" and isinstance(node.get("nodes"), list):
@@ -572,7 +539,6 @@ class _profileParse:
             result[i] = self.parse_indexed_data(struct, node_index=i, missing_value=missing_value)
         return result
 
-# Main Class
 class profile:
     def __init__(self, json_content=None, preserve_positions=True, collapse_wrappers=True, prefer_value_only=False):
         if json_content is None: raise CompanyProfileNoDataError("No JSON content provided")    	
@@ -641,7 +607,6 @@ class profile:
             return re.sub(r'\.(?=[A-Z])', '. ', t)
         return "N/A"
     @property
-    # def company_filings(self):   return self._parsed.get('filings', "N/A")
     def company_filings(self):
         return "N/A" if self._parsed.get('filings', "N/A") == "N/A" else [
             {**f, 'path': f['path'] if f['path'].startswith("https://www.sec.gov/Archives/") else "https://www.sec.gov/Archives/" + f['path']} 

@@ -5,3 +5,17 @@ include README.md
 include SECURITY.md
 recursive-include files *.json *.txt
 recursive-include gui/assets *.ico *.png
+recursive-include assets/png *.png
+
+include CHANGELOG.md
+include requirements-runtime.txt
+include requirements-test.txt
+recursive-include tests *.py *.csv
+recursive-include docs *.md
+prune .release-check
+
+exclude docs/RELEASE.md
+exclude docs/VERIFICATION.md
+exclude tools/verify_release.py
+prune docs/verification
+prune .local

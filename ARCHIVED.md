@@ -1,28 +1,15 @@
 # quantsumore project retirement
 
-`quantsumore` was retired on July 27, 2025. The project is preserved for
-historical reference and is no longer maintained.
+quantsumore was retired on July 27, 2025. It remains retired and unsupported.
 
-## What retirement means
+The last maintained release at retirement was 2.1.5b1. Version 3.0.0b2 later preserved the archival source and retirement notice. During subsequent evaluation, import, transport and numerical defects were discovered. Version 3.0.0b3 is a one-time corrective archival release addressing verified defects; it does not resume maintenance.
 
-- No new releases, features, compatibility updates, endpoint repairs, or bug fixes are planned.
-- No security updates or private security-response process are provided.
-- Issues, pull requests, feature requests, and support requests are not accepted.
-- Existing behavior may stop working as third-party websites, APIs, and data formats change.
-- Published packages remain available for reproducibility, but are unsupported.
+After this correction, no further releases, features, compatibility updates, endpoint repairs, security updates or support are planned. Issues, pull requests and support requests are not accepted. There is no active private security-response process.
 
-The last maintained PyPI release available at retirement was `2.1.5b1`. A final
-archival release, `3.0.0b2`, was published later to preserve the final source
-state and surface this retirement notice. Neither release is supported or
-should be treated as production-ready or as a maintained source of financial
-data.
+Validation covers selected workflows on Windows with CPython 3.13; it does not establish every legacy endpoint or operating system. Third-party sources and formats may change without notice. Legacy examples for unverified features are historical references, not proof of current functionality. Numeric parity does not establish predictive trading performance.
 
-## Using or continuing the project
+Preserve prior versions and Git tags. The planned new tag is v3.0.0-beta.3, corresponding to package version 3.0.0b3.
 
-Do not depend on this project for production systems, security-sensitive
-workloads, or financial decisions. Users who need to continue development may
-fork the repository under the terms of the Apache License 2.0. Any fork is an
-independent project and is responsible for its own maintenance, security,
-documentation, and compliance with third-party data-provider terms.
+## Continuing the project
 
-The original project name does not imply endorsement of a fork.
+Source remains available under Apache License 2.0. Users may independently maintain a fork and are responsible for dependency, security and data-provider reviews. The original name does not imply endorsement of a fork.

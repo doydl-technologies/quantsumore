@@ -55,33 +55,11 @@
 
 from copy import deepcopy
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# from ...date_parser import dtparse
-from ...proxy import Proxy
-from ...exceptions import (
-    # EquityPipelineError,
-    # IPOError,
-    # IPONoDataError,
-    # IPODataUnavailableError,
-    # LatestError,
-    # LatestNoDataError,
-    # LatestDataUnavailableError,
-    # HistoricalError,
-    # HistoricalNoDataError,
-    # HistoricalDataUnavailableError,
-    # LastTradeError,
-    # LastTradeNoDataError,
-    # LastTradeDataUnavailableError,
+from ....proxy import Proxy
+from ....exceptions import (
     QuoteStatisticsError,
-    # QuoteStatisticsValidationError,
     QuoteStatisticsNoDataError,
-    # QuoteStatisticsUnavailableError,
-    # CompanyProfileError,
-    # CompanyProfileValidationError,
-    # CompanyProfileNoDataError,
-    # CompanyProfileUnavailableError,
 )
-# from ...markup import idextract
 
 
 __all__ = ['quote_statistics']
@@ -90,21 +68,12 @@ __all__ = ['quote_statistics']
 
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 
-######################################################################
-# DATA TYPE 1
-######################################################################
 """
 Expected Input: Quote Statistics API Response (Screener/Market Fundamentals Endpoint)
 
@@ -180,7 +149,7 @@ class quote_statistics:
         else: raise QuoteStatisticsError(f"Unsupported response type: {type(payload)}")
         if isinstance(node, dict) and len(node) == 1:
             key = next(iter(node))
-            if isinstance(key, str) and '+' in key: node = node[key]
+            if isinstance(key, str) and key.startswith(('https://', 'http://')): node = node[key]
         if isinstance(node, dict) and "response" in node: node = node["response"]
         if not isinstance(node, dict) or "data" not in node or "status" not in node: raise QuoteStatisticsError("Unexpected structure after unwrapping URL/response")
         data_section = node.get("data")
@@ -203,8 +172,8 @@ class quote_statistics:
         else: return obj
     def _metrics(self):
         record = self._payload["data"]["data"][0]; out = {}
-        for api_key, human in self.METRIC_KEY_MAP.items():
-            value = record.get(api_key)
+        for field_key, human in self.METRIC_KEY_MAP.items():
+            value = record.get(field_key)
             if human=="Ticker" and isinstance(value, str): value = value.lstrip('$').strip()
             out[human] = value
         low, high = record.get('low'), record.get('high')

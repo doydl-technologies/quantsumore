@@ -52,35 +52,27 @@
 ## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-from ...date_parser import dtparse
-from ...strata_utils import IterDict
+from ....date_parser import dtparse
+from ....strata_utils import IterDict
 from ...parse_tools import (
     convert_to_float,
     convert_to_yield,
 )
 from ...shape_tools import is_valid_dataframe
-from ...statement_types.types import FinancialStatement, DividendSummary, DividendHistory
-from ...proxy import Proxy
-from ...exceptions import (
-    # DividendHistoryError,
+from ....statement_types.types import FinancialStatement, DividendSummary, DividendHistory
+from ....proxy import Proxy
+from ....exceptions import (
     DividendHistoryNoDataError,
     DividendHistoryUnavailableError,
 )
-from ...markup import idextract
+from ....markup import idextract
 
 __all__ = ['dividend']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Lazily load the entire module; actual import occurs on first use.
-pd = Proxy("pandas", None)  # Third-party library imports (from PyPI or other package sources)  
+# Defer dependency imports until first use.
+pd = Proxy("pandas", None)
 
 
 

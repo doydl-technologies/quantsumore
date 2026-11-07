@@ -58,122 +58,124 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import os
 from datetime import datetime
-import threading
-import time
-import queue
+import sys
 
 
 __all__ = ['InflationCalculatorApp']
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# class AssetFinder:
-#     class fPath:
-#         def __init__(self, unique_identifier="## -- quantsumore -- ##"):
-#             self.unique_identifier = unique_identifier
-# 
-#         def _root(self):
-#             """Finds the root directory marked by a unique identifier in its __init__.py."""
-#             current_directory = os.path.dirname(os.path.abspath(__file__))
-#             while current_directory != os.path.dirname(current_directory):
-#                 init_file_path = os.path.join(current_directory, '__init__.py')
-#                 if os.path.isfile(init_file_path):
-#                     with open(init_file_path, 'r') as f:
-#                         if self.unique_identifier in f.read():
-#                             return current_directory
-#                 current_directory = os.path.dirname(current_directory)
-#             return None
-# 
-#         def _find_file(self, directory, file_name):
-#             """Searches for a file within the given directory."""
-#             if not os.path.splitext(file_name)[1]:
-#                 file_name += '.py'
-#             for dirpath, dirnames, filenames in os.walk(directory):
-#                 if file_name in filenames:
-#                     return os.path.join(dirpath, file_name)
-#             return None
-# 
-#         def _find_directory(self, root_directory, target_directory):
-#             """Searches for a directory within the given root directory."""
-#             for dirpath, dirnames, _ in os.walk(root_directory):
-#                 if target_directory in dirnames:
-#                     return os.path.join(dirpath, target_directory)
-#             return None
-# 
-#         def return_path(self, file=None, directory=None):
-#             """Find either a file or directory based on input."""
-#             if file and not directory:
-#                 return self._find_file(directory=self._root(), file_name=file)
-#             elif directory and not file:
-#                 return self._find_directory(root_directory=self._root(), target_directory=directory)
-#             else:
-#                 return None
-#     
-#     def __init__(self, encoding='utf-8'):
-#         self.encoding = encoding
-#         self.path_handler = self.fPath()
-#                 
-#     def trace(self, file=None, directory=None):
-#         return self.path_handler.return_path(file=file, directory=directory) 
-# 
-# picPath = AssetFinder()
 
 def get_assets_dir():
-    # Get the directory containing THIS script
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    # Move UP one level (to .../gui) and then into 'assets'
     assets_dir = os.path.join(base_dir, '..', 'assets')
-    # Normalize to absolute path
     assets_dir = os.path.abspath(assets_dir)
     return assets_dir
 
 assets_path = get_assets_dir()
 
 
-
-
-
-
 class InflationCalculatorApp(tk.Tk):
     def __init__(self, calculator):
+        if sys.platform == 'win32':
+            # Keep the standalone calculator separate from Python's taskbar group.
+            import ctypes
+            set_app_id = ctypes.WinDLL('shell32').SetCurrentProcessExplicitAppUserModelID
+            set_app_id.argtypes = [ctypes.c_wchar_p]
+            set_app_id.restype = ctypes.c_long
+            result = set_app_id('DOYDL.Quantsumore.InflationCalculator')
+            if result < 0:
+                raise OSError(result, 'Unable to set the calculator application ID')
         super().__init__()
         self.calculator = calculator
         self.withdraw()
         self.running = True
-        self.init_queue()
+        self._resolution_after_id = None
+        self._icon_handles = []
+        self._icon_user32 = None
         self.previous_screen_width = None
         self.previous_screen_height = None
-
-    def init_queue(self):
-        self.queue = queue.Queue()
-        self.monitor_thread = threading.Thread(target=self.monitor_resolution)
-        self.monitor_thread.daemon = True
-        self.monitor_thread.start()
-        self.process_queue()
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.monitor_resolution()
 
     def monitor_resolution(self):
-        while self.running:
-            screen_width = self.winfo_screenwidth()
-            screen_height = self.winfo_screenheight()
-            if (screen_width != self.previous_screen_width or screen_height != self.previous_screen_height):
-                self.queue.put((screen_width, screen_height))
-                self.previous_screen_width = screen_width
-                self.previous_screen_height = screen_height
-            time.sleep(1)  # Check every 1 second
+        # Screen-size queries are Tk calls too: keep them on the GUI thread.
+        self._resolution_after_id = None
+        if not self.running:
+            return
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        if (screen_width != self.previous_screen_width or
+                screen_height != self.previous_screen_height):
+            self.set_window_center(screen_width, screen_height)
+            self.previous_screen_width = screen_width
+            self.previous_screen_height = screen_height
+        self._resolution_after_id = self.after(1000, self.monitor_resolution)
 
-    def process_queue(self):
-        if self.running:  # Only process the queue if the app is still running
-            try:
-                screen_width, screen_height = self.queue.get_nowait()
-                self.set_window_center(screen_width, screen_height)
-            except queue.Empty:
-                pass
-            self.after(100, self.process_queue)  # Check queue every 100ms
+    def _configure_icons(self):
+        from PIL import Image, ImageTk
+
+        titlebar_path = os.path.join(assets_path, 'quantsumore-mark-titlebar.ico')
+        taskbar_path = os.path.join(assets_path, 'quantsumore-mark-taskbar.ico')
+        window_system = self.tk.call('tk', 'windowingsystem')
+        # Pillow decodes ICO into Tk photos; Unix iconbitmap cannot load ICO files.
+        with Image.open(taskbar_path) as image:
+            self._taskbar_photo = ImageTk.PhotoImage(image.convert('RGBA'), master=self)
+        with Image.open(titlebar_path) as image:
+            small = image.ico.getimage((16, 16)).convert('RGBA')
+            self._titlebar_photo = ImageTk.PhotoImage(small, master=self)
+        if window_system == 'aqua':
+            # macOS has an application/Dock icon, without a standard titlebar icon.
+            self.iconphoto(True, self._taskbar_photo)
+        else:
+            self.iconphoto(True, self._taskbar_photo, self._titlebar_photo)
+        if window_system == 'win32':
+            self._set_windows_icons(titlebar_path, taskbar_path)
+
+    def _set_windows_icons(self, titlebar_path, taskbar_path):
+        """Assign independent small (caption) and large (taskbar/Alt+Tab) icons."""
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+        user32.GetSystemMetrics.restype = ctypes.c_int
+        user32.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR,
+                                     wintypes.UINT, ctypes.c_int, ctypes.c_int,
+                                     wintypes.UINT]
+        user32.LoadImageW.restype = wintypes.HANDLE
+        user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT,
+                                       ctypes.c_size_t, ctypes.c_ssize_t]
+        user32.SendMessageW.restype = ctypes.c_ssize_t
+        user32.DestroyIcon.argtypes = [wintypes.HANDLE]
+        user32.DestroyIcon.restype = wintypes.BOOL
+        self._icon_user32 = user32
+        self.update_idletasks()
+        hwnd = user32.GetAncestor(self.winfo_id(), 2)  # GA_ROOT: Tk's native wrapper.
+        if not hwnd:
+            raise ctypes.WinError(ctypes.get_last_error())
+        loaded = []
+        try:
+            # ICON_SMALL=0 and ICON_BIG=1; system metrics select the matching size.
+            for path, width_metric, height_metric in (
+                    (titlebar_path, 49, 50), (taskbar_path, 11, 12)):
+                handle = user32.LoadImageW(None, path, 1,
+                                          user32.GetSystemMetrics(width_metric),
+                                          user32.GetSystemMetrics(height_metric),
+                                          0x0010)  # IMAGE_ICON, LR_LOADFROMFILE.
+                if not handle:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                loaded.append(handle)
+        except Exception:
+            for handle in loaded:
+                user32.DestroyIcon(handle)
+            raise
+        for kind, handle in enumerate(loaded):
+            user32.SendMessageW(hwnd, 0x0080, kind, handle)  # WM_SETICON.
+        for handle in self._icon_handles:
+            user32.DestroyIcon(handle)
+        self._icon_handles = loaded
 
     def set_window_center(self, screen_width, screen_height):
         window_width = 600
@@ -183,125 +185,98 @@ class InflationCalculatorApp(tk.Tk):
         self.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
 
     def initialize(self):
-        from PIL import Image, ImageTk # Third-party library imports (from PyPI or other package sources)
+        from PIL import Image, ImageTk
         
         self.title("Inflation Calculator")
-        self.deiconify()
+        self._configure_icons()
 
-        # Set the window icon using an absolute path
-        # script_dir = picPath.trace(directory="assets")
-        # icon_path = os.path.join(script_dir, 'icon.ico')
-        icon_path = os.path.join(assets_path, 'icon.ico')       
-        self.iconbitmap(icon_path)
-
-        # Set the initial size of the window
         self.geometry("600x500")
         self.minsize(600, 500)
+        self.resizable(False, False)
 
-        # Load the logo image
-        # logo_path = os.path.join(script_dir, 'icon.png')
-        logo_path = os.path.join(assets_path, 'icon.png')       
-        self.logo_image = Image.open(logo_path)
+        logo_path = os.path.join(assets_path, 'quantsumore-endorsed-lockup-dark.png')
+        with Image.open(logo_path) as image:
+            self.logo_image = image.copy()
 
-        # Desired width while maintaining aspect ratio
-        new_width = 160
+        new_width = 420
         original_width, original_height = self.logo_image.size
         aspect_ratio = original_height / original_width
         new_height = int(new_width * aspect_ratio)
 
-        # Resize the image with the new dimensions
         self.logo_image = self.logo_image.resize((new_width, new_height), Image.LANCZOS)
-        self.logo_photo = ImageTk.PhotoImage(self.logo_image)
+        self.logo_photo = ImageTk.PhotoImage(self.logo_image, master=self)
 
-        # Create a Label widget to display the logo
         self.logo_label = tk.Label(self, image=self.logo_photo)
         self.logo_label.pack(pady=10)
 
-        # Create a notebook
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(pady=10, expand=True)
 
-        # Application Tabs   <<-----
         self.create_adjustment_tab()
         self.create_current_year_tab()
         self.create_comparison_tab()
 
-        # Bind the tab change event
         self.notebook.bind("<<NotebookTabChanged>>", self.clear_other_tabs)
+        self.deiconify()
 
     def create_adjustment_tab(self):
         self.adjustment_frame = ttk.Frame(self.notebook, width=400, height=300)
         self.adjustment_frame.pack(fill='both', expand=True)
 
-        # Amount Label and Entry
         ttk.Label(self.adjustment_frame, text="Dollar Amount:").grid(row=0, column=0, padx=10, pady=10)
         self.amount_entry = ttk.Entry(self.adjustment_frame)
         self.amount_entry.grid(row=0, column=1, padx=10, pady=10)
 
-        # Original Year Label and Entry
         ttk.Label(self.adjustment_frame, text="Original Year:").grid(row=1, column=0, padx=10, pady=10)
         self.original_year_entry = ttk.Entry(self.adjustment_frame)
         self.original_year_entry.grid(row=1, column=1, padx=10, pady=10)
 
-        # Target Year Label and Entry
         ttk.Label(self.adjustment_frame, text="Target Year:").grid(row=2, column=0, padx=10, pady=10)
         self.target_year_entry = ttk.Entry(self.adjustment_frame)
         self.target_year_entry.grid(row=2, column=1, padx=10, pady=10)
 
-        # Calculate Button
         self.calculate_button = ttk.Button(self.adjustment_frame, text="Calculate", command=self.calculate_inflation)
         self.calculate_button.grid(row=3, columnspan=2, pady=10)
 
-        # Result Label
         self.result_label = ttk.Label(self.adjustment_frame, text="")
         self.result_label.grid(row=4, columnspan=2, pady=10)
         
-        # Add Notebook
         self.notebook.add(self.adjustment_frame, text='Adjusted Value')
 
     def create_current_year_tab(self):
         self.current_year_frame = ttk.Frame(self.notebook, width=400, height=300)
         self.current_year_frame.pack(fill='both', expand=True)
 
-        # Amount Label and Entry
         ttk.Label(self.current_year_frame, text="Dollar Amount:").grid(row=0, column=0, padx=10, pady=10)
         self.amount_current_entry = ttk.Entry(self.current_year_frame)
         self.amount_current_entry.grid(row=0, column=1, padx=10, pady=10)
 
-        # Calculate Button
         self.current_year_button = ttk.Button(self.current_year_frame, text="Calculate", command=self.current_year_change)
         self.current_year_button.grid(row=1, columnspan=2, pady=10)
 
-        # Result Label
         self.current_year_result_label = ttk.Label(self.current_year_frame, text="")
         self.current_year_result_label.grid(row=2, columnspan=2, pady=10)
         
-        # Add Notebook
         self.notebook.add(self.current_year_frame, text='Current Year Change')
 
     def create_comparison_tab(self):
         self.comparison_frame = ttk.Frame(self.notebook, width=400, height=300)
         self.comparison_frame.pack(fill='both', expand=True)
 
-        # Amount Label and Entry
         ttk.Label(self.comparison_frame, text="Dollar Amount:").grid(row=0, column=0, padx=10, pady=10)
         self.amount_comparison_entry = ttk.Entry(self.comparison_frame)
         self.amount_comparison_entry.grid(row=0, column=1, padx=10, pady=10)
 
-        # Number of Years Label and Entry
         ttk.Label(self.comparison_frame, text="Number of Years:").grid(row=1, column=0, padx=10, pady=10)
         self.n_years_entry = ttk.Entry(self.comparison_frame)
         self.n_years_entry.grid(row=1, column=1, padx=10, pady=10)
 
-        # Calculate Button
         self.comparison_button = ttk.Button(self.comparison_frame, text="Calculate", command=self.comparison)
         self.comparison_button.grid(row=2, columnspan=2, pady=10)
 
-        # Result Label
         self.comparison_result_label = ttk.Label(self.comparison_frame, text="")
         self.comparison_result_label.grid(row=3, columnspan=2, pady=10)
         
-        # Add Notebook
         self.notebook.add(self.comparison_frame, text='Year-by-Year Change')
 
     def clear_other_tabs(self, event):
@@ -321,13 +296,11 @@ class InflationCalculatorApp(tk.Tk):
 
     def calculate_inflation(self):
         try:
-            # Get input values
-            current_month = datetime.now().strftime("%B") # Get the current month name
+            current_month = datetime.now().strftime("%B")
             amount = float(self.amount_entry.get())
             original_year = int(self.original_year_entry.get())
             target_year = int(self.target_year_entry.get())
 
-            # Perform calculation
             adjusted_value = self.calculator.select(amount, original_year, target_year, month_input=current_month)
 
             if adjusted_value is not None:
@@ -342,10 +315,8 @@ class InflationCalculatorApp(tk.Tk):
 
     def current_year_change(self):
         try:
-            # Get input value
             amount = float(self.amount_current_entry.get())
 
-            # Perform calculation
             results = self.calculator.month_by_month(amount)
 
             if results:
@@ -360,11 +331,9 @@ class InflationCalculatorApp(tk.Tk):
 
     def comparison(self):
         try:
-            # Get input values
             amount = float(self.amount_comparison_entry.get())
             n_years = int(self.n_years_entry.get())
 
-            # Perform calculation
             results = self.calculator.year_by_year(amount, n_years)
 
             if results:
@@ -378,9 +347,20 @@ class InflationCalculatorApp(tk.Tk):
             messagebox.showerror("Error", f"An error occurred: {e}")
             
     def on_closing(self):
-        self.running = False
-        self.monitor_thread.join()
         self.destroy()
+
+    def destroy(self):
+        self.running = False
+        if self._resolution_after_id is not None:
+            self.after_cancel(self._resolution_after_id)
+            self._resolution_after_id = None
+        try:
+            super().destroy()
+        finally:
+            # LoadImageW handles must remain valid until the native window is destroyed.
+            for handle in self._icon_handles:
+                self._icon_user32.DestroyIcon(handle)
+            self._icon_handles.clear()
 
     def run(self):
         self.initialize()

@@ -63,22 +63,13 @@ import base64
 import random
 import json
 
-# Get the root directory of the project
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 NASDAQ_STOCK_LIST_URL = base64.b64decode('aHR0cDovL3d3dy5uYXNkYXF0cmFkZXIuY29tL2R5bmFtaWMvc3ltZGlyL25hc2RhcWxpc3RlZC50eHQ=').decode('utf-8')
 NYSE_STOCK_LIST_URL = base64.b64decode('aHR0cHM6Ly93d3cubnlzZS5jb20vcHVibGljZG9jcy9ueXNlL3N5bWJvbHMvRUxJR0lCTEVTVE9DS1NfTllTRUFtZXJpY2FuLnhscw==').decode('utf-8')
 
-# # Load user agents
-# with open('files/user_agents.json', 'r') as file:
-#     user_agents = json.load(file)
 
-# key = random.choice(list(user_agents['Desktop User-Agents'].keys()))
-# randkey = str(random.randint(1, 5))
-# ua = user_agents['Desktop User-Agents'][key][randkey]
-# headers = {'User-Agent': ua}
 
-# Basic headers
 headers = {
     'User-Agent': 'Mozilla/5.0 (compatible; GitHubActionBot/1.0)'
 }
@@ -112,8 +103,8 @@ def get_stock_ticker_data(url):
         dataframe = dataframe[['Symbol', 'Security Name', 'Exchange', 'yahoo_mapping', 'nasdaq_mapping']]
         dataframe.columns = ['Symbol', 'Company', 'Exchange', 'yahoo_mapping', 'nasdaq_mapping']
     elif "NYSEAmerican" in url:
-        dataframe = dataframe[~dataframe["Symbol"].str.contains('\+', case=False, na=False)]
-        dataframe = dataframe[~dataframe["Symbol"].str.contains('\^', case=False, na=False)]
+        dataframe = dataframe[~dataframe["Symbol"].str.contains(r'\+', case=False, na=False)]
+        dataframe = dataframe[~dataframe["Symbol"].str.contains(r'\^', case=False, na=False)]
         dataframe = dataframe[~dataframe["Company"].str.contains('TEST STOCK', case=False, na=False)]
         dataframe = dataframe[~dataframe["Symbol"].str.contains('TEST', case=False, na=False)]
         dataframe.loc[:, "Exchange"] = "NYSE"

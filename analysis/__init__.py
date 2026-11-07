@@ -53,25 +53,14 @@
 #
 
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# from ._fa import process as PROC
 from ._fa import get_process
 from .fundamental import fAnalyze
 from .technical import tAnalyze as tAnalysis
-from quantsumore._http.connection import APIKey
 
 __all__ = ['tAnalysis', 'fAnalysis']
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# Create the object
-# fAnalysis = fAnalyze(engine=PROC)
 fAnalysis = fAnalyze(engine=get_process())
 
 def __dir__():

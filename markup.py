@@ -54,13 +54,8 @@
 
 import html as std_html
 import re
-from urllib.parse import parse_qs
-# import json
-# from collections.abc import Mapping, Sequence
-# from abc import ABC, abstractmethod
+from urllib.parse import parse_qs, urlsplit
 
-# ────────── Project-specific imports (directly from this project's source code) ─────────────────────────────
-# # from .proxy import Proxy
 
 
 __all__ = [
@@ -70,15 +65,7 @@ __all__ = [
 ]
 
 
-# ━━━━━━━━━━━━━━ Core Module Implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━
-# This segment delineates the functional backbone of the module.
-# It comprises the abstractions and behaviors essential for runtime
-# execution—if applicable—encapsulated in class and function constructs.
-# In minimal implementations, this may simply define constants, metadata,
-# or serve as an interface placeholder.
 
-# # Replace the real import with a lazy proxy
-# BeautifulSoup = Proxy("bs4", "BeautifulSoup") # Third-party library imports (from PyPI or other package sources) 
 
 class HTMLCleaner:
     def __init__(self):
@@ -185,7 +172,7 @@ class URLEncoderDecoder:
         return encoded_join_char.join(encoded_list)
        
        
-# ────────── Instrument Extractors ────────────  
+# Instrument extractors.
 class identifier:
     SYMBOL          = 'symbol'
     CURRENCY_PAIR   = 'currency_pair'
@@ -224,22 +211,22 @@ class identifier:
 
     def _extract_symbol(self, url):
         url = self._unwrap(url)
-        after_plus = url.split('+', 1)[1] if '+' in url else url
+        source_url = url
         # 1) first segment before / ? or &
-        seg = re.split(r'[/?&]', after_plus, 1)[0]
+        seg = re.split(r'[/?&]', source_url, 1)[0]
         if re.fullmatch(r'[A-Z]{1,4}[-.^]?[A-Z]{0,4}', seg):
             return seg.upper()
         # 2) /stocks/FOO/...
-        m = re.search(r'/stocks/([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', after_plus)
+        m = re.search(r'/stocks/([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', source_url)
         if m: return m.group(1).upper()
         # 3) ?symbols=FOO or &symbols=FOO
-        m = re.search(r'[?&]symbols=([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', after_plus)
+        m = re.search(r'[?&]symbols=([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', source_url)
         if m: return m.group(1).upper()
         # 4) screener f=s-is-%2524FOO
-        m = re.search(r'f=s-is-%2524([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[&]|$)', after_plus)
+        m = re.search(r'f=s-is-%2524([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[&]|$)', source_url)
         if m: return m.group(1).upper()
         # 5) generic catch‑all
-        m = re.search(r'(?:/|[?&]|symbols=)([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', after_plus)
+        m = re.search(r'(?:/|[?&]|symbols=)([A-Z]{1,4}[-.^]?[A-Z]{0,4})(?=[/?&]|$)', source_url)
         return m.group(1).upper() if m else None
 
     def _extract_slug(self, url):
@@ -254,171 +241,28 @@ class identifier:
 
     def _extract_currency_pair(self, url):
         url = self._unwrap(url)
-        after_plus = url.split('+', 1)[1] if '+' in url else url
+        source_url = url
         # 1) before any / or ?
-        seg = re.split(r'[/?]', after_plus, 1)[0]
+        seg = re.split(r'[/?]', source_url, 1)[0]
         if re.fullmatch(r'[A-Za-z]{6}', seg):
             return seg.upper()
         # 2) ?ratepair=EURUSD
-        qs = after_plus.lstrip('?')
+        qs = urlsplit(source_url).query or source_url.lstrip('?')
         params = parse_qs(qs)
         if 'ratepair' in params and params['ratepair']:
             pair = params['ratepair'][0]
             if re.fullmatch(r'[A-Za-z]{6}', pair):
                 return pair.upper()
         # 3) /quotes/%5EFOO
-        m = re.search(r'/quotes/%5E([A-Za-z]+)', after_plus)
+        m = re.search(r'/(?:quotes/%5E|quote/)([A-Za-z]{6})(?=/|$)', source_url)
         return m.group(1).upper() if m else None
 
     def __dir__(self):
         return ['extract']       
        
-# Instantiate objects
 url_encode_decode = URLEncoderDecoder()
 HTMLclean = HTMLCleaner()
 idextract = identifier()
 
 def __dir__():
     return __all__
-
-
-
-# # HTML‐detection logic
-# # ————————————————————————————————————
-# _HTML_DOCTYPE_RE = re.compile(r'^\s*<!doctype\s+html', re.I)
-# _HTML_TAG_RE     = re.compile(r'<html\b', re.I)
-
-# def is_html_string(s: str) -> bool:
-#     if not isinstance(s, str):
-#         return False    
-#     head = s[:1024]
-#     if _HTML_DOCTYPE_RE.match(head) or _HTML_TAG_RE.search(head):
-#         return True
-#     # only now do we import/parse
-#     return bool(BeautifulSoup(s, 'html.parser').find('html'))
-
-
-# # Recursive finders
-# # ————————————————————————————————————
-# def find_html_strings(obj):
-#     """
-#     Recursively traverse nested dicts/lists and yield any strings
-#     that pass `is_html_string`.
-#     """
-#     if isinstance(obj, Mapping):
-#         for value in obj.values():
-#             yield from find_html_strings(value)
-
-#     elif isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
-#         for item in obj:
-#             yield from find_html_strings(item)
-
-#     elif is_html_string(obj):
-#         yield obj
-
-# def find_first_html(obj):
-#     """
-#     Recursively find and return the first HTML-like string.
-#     Returns None if none is found.
-#     """
-#     if isinstance(obj, Mapping):
-#         for value in obj.values():
-#             result = find_first_html(value)
-#             if result is not None:
-#                 return result
-#     elif isinstance(obj, Sequence) and not isinstance(obj, (str, bytes)):
-#         for item in obj:
-#             result = find_first_html(item)
-#             if result is not None:
-#                 return result
-#     elif is_html_string(obj):
-#         return obj
-#     return None
-
-# class _PageValidator(ABC):
-#     def __init__(self, html):
-#         # this calls BeautifulSoup(...) internally
-#         self.soup = BeautifulSoup(html, 'html.parser')
-
-#     @abstractmethod
-#     def is_valid(self) -> bool:
-#         """Return True if this HTML matches the expected page structure."""
-#         ...
-
-# class _FinanceValidator(_PageValidator):
-#     REQUIRED_SECTIONS = [
-#         "Key Executives", "Corporate Governance", "Description",
-#         "Financial Highlights", "Valuation Measures", "Trading Information"
-#     ]
-
-#     def _has_ticker(self, expected) -> bool:
-#         # Extract <title> and parse out the ticker in parentheses:
-#         title = self.soup.title and self.soup.title.get_text()
-#         if not title:
-#             return False
-#         # e.g. "Meta Platforms, Inc. (META) Stock Price..."
-#         import re
-#         m = re.search(r'\(([A-Z0-9\-\.]+)\)', title)
-#         return bool(m and m.group(1).upper() == expected.upper())
-
-#     def _has_any_section(self, headings) -> bool:
-#         for h3 in self.soup.find_all("h3"):
-#             text = h3.get_text(strip=True)
-#             for kw in headings:
-#                 if kw.lower() in text.lower():
-#                     return True
-#         return False
-
-#     def is_valid(self, expected_ticker=None) -> bool:
-#         # 1) Ticker match (if provided)
-#         if expected_ticker:
-#             if not self._has_ticker(expected_ticker):
-#                 return False
-
-#         # 2) Must have at least one of the profile or stats sections
-#         profile_ok = self._has_any_section(self.REQUIRED_SECTIONS[:3])
-#         stats_ok   = self._has_any_section(self.REQUIRED_SECTIONS[3:])
-#         return profile_ok or stats_ok
-
-# class _FXCurrencyValidator(_PageValidator):
-#     def _find_pair_in_header(self, pair) -> bool:
-#         # Many Bchart pages include the symbol in a <h1> or in JSON-LD
-#         header = self.soup.find('h1')
-#         if header and pair.upper() in header.get_text():
-#             return True
-#         # fallback: look for JSON-LD <script type="application/ld+json">
-#         for script in self.soup.find_all("script", type="application/ld+json"):
-#             try:
-#                 data = json.loads(script.string)
-#                 if pair.upper() in json.dumps(data):
-#                     return True
-#             except Exception:
-#                 pass
-#         return False
-
-#     def is_valid(self, expected_pair=None) -> bool:
-#         if expected_pair:
-#             normalized = re.sub(r'[^A-Za-z]', '', expected_pair).upper()
-#             return self._find_pair_in_header(normalized)
-#         return False
-
-# def validateHTMLResponse(
-#     html: str,
-#     source: str,
-#     symbol: str
-# ) -> bool:
-#     """
-#     :param html: raw HTML string
-#     :param source: either "yahoo" or "barchart"
-#     :param symbol: ticker or currency pair
-#     """
-#     validators = {
-#         "yahoo": _FinanceValidator,
-#         "barchart": _FXCurrencyValidator,
-#     }
-#     ValidatorCls = validators.get(source)
-#     if not ValidatorCls:
-#         raise ValueError(f"Unknown source {source!r}")
-#     validator = ValidatorCls(html)
-#     return validator.is_valid(symbol)
-
