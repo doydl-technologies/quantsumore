@@ -18,3 +18,4 @@ Home.lnk
 /docs/VERIFICATION.md
 /tools/verify_release.py
 /.local/
+*-deprecated-[0-9]*

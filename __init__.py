@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 #
-## ╭────────────────────────────────────────────────────────────────────────────────────────────╮
+## ╭─────────────────────────────────────────────────────────────────────────────────────────────╮
 ## │  Library         : doydl's Finance API Client — quantsumore                                 │
+## │                                                                                             │
+## │  Project Status  : Retired on July 27, 2025. Deprecated and unsupported.                    │
+## │                    Preserved for historical reference only. No ongoing development,         │
+## │                    compatibility fixes, endpoint repairs, support, or security updates      │
+## │                    are planned. Corrective archival releases do not resume maintenance.     │
 ## │                                                                                             │
 ## │                                                                                             │
 ## │  Description     : `quantsumore` is a comprehensive Python library designed to streamline   │
@@ -49,7 +54,7 @@
 ## │                    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or          │
 ## │                    implied. See the License for the specific language governing             │
 ## │                    permissions and limitations under the License.                           │
-## ╰────────────────────────────────────────────────────────────────────────────────────────────╯
+## ╰─────────────────────────────────────────────────────────────────────────────────────────────╯
 #
 
 """
