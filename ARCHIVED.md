@@ -8,7 +8,7 @@ After this correction, no further releases, features, compatibility updates, end
 
 Validation covers selected workflows on Windows with CPython 3.13; it does not establish every legacy endpoint or operating system. Third-party sources and formats may change without notice. Legacy examples for unverified features are historical references, not proof of current functionality. Numeric parity does not establish predictive trading performance.
 
-Preserve prior versions and Git tags. The planned new tag is v3.0.0-beta.3, corresponding to package version 3.0.0b3.
+Version 3.0.0b4 corrects package author metadata to DOYDL Technologies without changing library behavior. It retains the corrective archival changes in 3.0.0b3. The Git tag is v3.0.0b4; prior versions and tags remain historical records.
 
 ## Continuing the project
 

@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantsumore"
-version = "3.0.0b3"
+version = "3.0.0b4"
 description = "Retired and unsupported financial-market data client preserved for archival use."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
-  { name = "Cedric Moore Jr." },
+  { name = "DOYDL Technologies" },
 ]
 keywords = ["finance", "market-data", "retired", "unsupported"]
 classifiers = [

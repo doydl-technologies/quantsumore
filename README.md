@@ -1,9 +1,8 @@
- 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0-beta.3/assets/png/quantsumore-endorsed-lockup-light.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0-beta.3/assets/png/quantsumore-endorsed-lockup-dark.png">
-    <img src="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0-beta.3/assets/png/quantsumore-endorsed-lockup-dark.png" alt="quantsumore — powered by DOYDL Technologies" width="700">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0b4/assets/png/quantsumore-endorsed-lockup-light.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0b4/assets/png/quantsumore-endorsed-lockup-dark.png">
+    <img src="https://raw.githubusercontent.com/doydl-technologies/quantsumore/v3.0.0b4/assets/png/quantsumore-endorsed-lockup-dark.png" alt="quantsumore — powered by DOYDL Technologies" width="700">
   </picture>
 </p>
 
@@ -12,7 +11,7 @@
 > [!WARNING]
 > **🛑 This project was retired on July 27, 2025, and remains unsupported.**
 >
-> Version **3.0.0b3** is a one-time corrective archival candidate, not a resumption of maintenance.
+> Version **3.0.0b4** corrects the package author metadata to **DOYDL Technologies** and retains the archival fixes from 3.0.0b3. It does not resume maintenance.
 >
 > After this correction, no further releases, compatibility fixes, endpoint repairs, support, or security updates are planned. Issues and pull requests are not being accepted.
 >
@@ -64,14 +63,14 @@ The clients retrieve observations from external services. The indicator, ratio, 
 
 ## 🏷️ Candidate status and requirements
 
-- 🏷️ **Version:** Display tag `v3.0.0-beta.3`; Python package version `3.0.0b3`.
+- 🏷️ **Version:** Display tag `v3.0.0b4`; Python package version `3.0.0b4`.
 - 📚 **Documentation:** Version-specific documentation and image links target that tag and resolve when it is published. For an unpublished checkout, use the local installation below; corresponding documentation and images are under `docs/` and `assets/`.
 - 🖥️ **Validated environment:** Windows x64, native CPython 3.13. Package metadata requires `>=3.13,<3.14`. Other operating systems are not covered by that validation.
 - 🔓 **Authentication:** The abandoned quantsumore project-key service has been removed. No project API key or relay account is required.
 - 🕒 **Data freshness:** Prices, FX rates, CPI values and yields have different units and reporting schedules. "Latest" means the provider's latest returned observation; inspect its currency and timestamp.
 - 🧪 **Live verification:** Selected equity quote/profile/history calls, daily FX conversion, crypto market pairs, Treasury rates and CPI have been checked. Other legacy endpoints and every fundamental-analysis method are not comprehensively verified.
 
-📄 See the complete retirement policy in [ARCHIVED.md](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/ARCHIVED.md).
+📄 See the complete retirement policy in [ARCHIVED.md](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/ARCHIVED.md).
 
 ---
 
@@ -104,7 +103,7 @@ If the Windows Python launcher is unavailable, invoke your native CPython 3.13 e
 **After publication**, the package version can instead be requested explicitly from PyPI inside a Python 3.13 environment:
 
 ```sh
-.venv/Scripts/python.exe -m pip install --upgrade quantsumore==3.0.0b3
+.venv/Scripts/python.exe -m pip install --upgrade quantsumore==3.0.0b4
 ```
 
 ### ▶️ Run the examples
@@ -325,7 +324,7 @@ The displayed `series_id` column retains a legacy internal identifier for compat
 
 **⚠️ Missing months:** Missing requested months fall back to yearly averages. Those averages use available observations, so an incomplete year's average is a partial-year value.
 
-📚 See [live CPI details](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/docs/CPI_LIVE.md) for retrieval timeouts, error handling and data conventions.
+📚 See [live CPI details](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/docs/CPI_LIVE.md) for retrieval timeouts, error handling and data conventions.
 
 ### 🖥️ Desktop inflation calculator
 
@@ -407,7 +406,7 @@ Its `snapshot()` method returns asset, exchange and currency collections from on
 
 **🔒 Data isolation:** Returned data is copied. Editing a returned list does not change stored metadata.
 
-📚 Read [the CryptoConfig guide](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/docs/CRYPTO_CONFIG.md) before customizing this workflow.
+📚 Read [the CryptoConfig guide](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/docs/CRYPTO_CONFIG.md) before customizing this workflow.
 
 ### ⚙️ Database paths
 
@@ -448,12 +447,12 @@ No unsupported endpoint repair, dependency upgrade or platform compatibility is 
 
 ## 📚 Further reading
 
-- 🔄 [Migration from 3.0.0b2](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/docs/MIGRATION.md)
-- 🖥️ [GUI behavior](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/docs/GUI.md)
+- 🔄 [Migration from 3.0.0b2](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/docs/MIGRATION.md)
+- 🖥️ [GUI behavior](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/docs/GUI.md)
 - 🕘 [Release history](https://doydl.studio/pages/open-source/quantsumore/changelog/)
-- 🗄️ [Retirement policy](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/ARCHIVED.md)
-- 🔐 [Security policy](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/SECURITY.md)
-- ⚖️ [Apache License 2.0](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0-beta.3/LICENSE)
+- 🗄️ [Retirement policy](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/ARCHIVED.md)
+- 🔐 [Security policy](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/SECURITY.md)
+- ⚖️ [Apache License 2.0](https://github.com/doydl-technologies/quantsumore/blob/v3.0.0b4/LICENSE)
 
 ---
 

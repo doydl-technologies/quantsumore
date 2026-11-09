@@ -75,7 +75,8 @@ class InstallationTests(unittest.TestCase):
         import importlib.metadata as metadata
         from importlib.resources import files
         import quantsumore
-        self.assertEqual(metadata.version('quantsumore'), '3.0.0b3')
+        self.assertEqual(metadata.version('quantsumore'), '3.0.0b4')
+        self.assertEqual(metadata.metadata('quantsumore')['Author'], 'DOYDL Technologies')
         self.assertEqual(quantsumore.__version__, metadata.version('quantsumore'))
         self.assertIn('site-packages', Path(quantsumore.__file__).parts)
         for name in ('files/stock_tickers.txt', 'files/crypto/all_data.json'):
@@ -104,7 +105,7 @@ with patch.object(requests.sessions.Session, "request", side_effect=AssertionErr
                                     env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(report, {'version': '3.0.0b3', 'installed': True})
+        self.assertEqual(report, {'version': '3.0.0b4', 'installed': True})
 
     def test_concurrent_cold_imports_never_read_partial_reference_files(self):
         program = '''
