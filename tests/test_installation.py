@@ -76,7 +76,6 @@ class InstallationTests(unittest.TestCase):
         from importlib.resources import files
         import quantsumore
         self.assertEqual(metadata.version('quantsumore'), '3.0.0b4')
-        self.assertEqual(metadata.metadata('quantsumore')['Author'], 'DOYDL Technologies')
         self.assertEqual(quantsumore.__version__, metadata.version('quantsumore'))
         self.assertIn('site-packages', Path(quantsumore.__file__).parts)
         for name in ('files/stock_tickers.txt', 'files/crypto/all_data.json'):

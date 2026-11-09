@@ -11,7 +11,7 @@
 > [!WARNING]
 > **🛑 This project was retired on July 27, 2025, and remains unsupported.**
 >
-> Version **3.0.0b4** corrects the package author metadata to **DOYDL Technologies** and retains the archival fixes from 3.0.0b3. It does not resume maintenance.
+> Version **3.0.0b4** is a one-time corrective archival candidate, not a resumption of maintenance.
 >
 > After this correction, no further releases, compatibility fixes, endpoint repairs, support, or security updates are planned. Issues and pull requests are not being accepted.
 >
